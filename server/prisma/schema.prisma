@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id         String   @id @default(uuid())
+  armyNumber String   @unique
+  rank       String
+  name       String
+  unit       String
+  trade      String
+  password   String
+  role       String   // "super_admin", "exam_officer", "candidate"
+  isActive   Boolean  @default(true)
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  attempts   Attempt[]
+}
+
+model Question {
+  id             String   @id @default(uuid())
+  type           String   // "mcq", "truefalse", "fillblank"
+  text           String
+  optionA        String?
+  optionB        String?
+  optionC        String?
+  optionD        String?
+  correctOptions String   // E.g., "B", "A", or "299792"
+  category       String
+  subject        String
+  topic          String
+  difficulty     String
+  bloom          String
+  marks          Int
+  explanation    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  exams          ExamQuestion[]
+  responses      Response[]
+}
+
+model Exam {
+  id              String   @id @default(uuid())
+  title           String
+  code            String?  @unique
+  subject         String?
+  course          String?
+  durationMinutes Int      // Overall exam timer in minutes
+  allowedAttempts Int      @default(1)
+  units           String   // Comma separated list of units, e.g., "A Coy, B Coy"
+  randomizeOrder  Boolean  @default(true)
+  shuffleOptions  Boolean  @default(false)
+  showResult      Boolean  @default(true)
+  instructions    String?
+  totalMarks      Int
+  passingMarks    Int?
+  startTime       DateTime?
+  endTime         DateTime?
+  isActive        Boolean  @default(true)
+  createdBy       String?  // Creator name or ID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  questions       ExamQuestion[]
+  attempts        Attempt[]
+}
+
+model ExamQuestion {
+  id         String   @id @default(uuid())
+  examId     String
+  questionId String
+  order      Int?
+
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@unique([examId, questionId])
+}
+
+model Attempt {
+  id             String    @id @default(uuid())
+  examId         String
+  candidateId    String
+  startTime      DateTime
+  submitTime     DateTime?
+  status         String    // "started", "submitted"
+  totalMarks     Int?
+  practicalMarks Int?      @default(0)
+  vivaMarks      Int?      @default(0)
+  subjectiveMarks Int?     @default(0)
+
+  exam        Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  candidate   User      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  responses   Response[]
+}
+
+model Response {
+  id             String   @id @default(uuid())
+  attemptId      String
+  questionId     String
+  selectedOption String?
+  marksAwarded   Int?
+
+  attempt        Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+}

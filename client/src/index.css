@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --olive: #4a5240;
+  --oldd: #2d3228;
+  --ollg: #6b7560;
+  --kh: #c4b98a;
+  --khl: #e8dfc0;
+  --am: #d4830a;
+  --amb: #f5a623;
+  --bg: #141610;
+  --sf: #1e201a;
+  --sf2: #272a21;
+  --sf3: #31352a;
+  --br: #3f4335;
+  --brl: #555b47;
+  --tx: #e8dfc0;
+  --txd: #9a9a80;
+  --txm: #6b6b58;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--tx);
+  font-family: 'Rajdhani', sans-serif;
+  min-height: 100vh;
+  line-height: 1.625;
+}
+
+/* Scanline effect */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.02) 3px,
+    rgba(0, 0, 0, 0.02) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Forms */
+.form-input {
+  display: block;
+  width: 100%;
+  border-radius: 0.25rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 13px;
+  outline: none;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  background-color: var(--sf2);
+  border: 1px solid var(--br);
+  color: var(--tx);
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.form-input:focus {
+  border-color: var(--am);
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--txd);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  letter-spacing: 0.025em;
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--am);
+  color: var(--oldd);
+}
+.btn-primary:hover {
+  background-color: var(--amb);
+}
+
+.btn-secondary {
+  background-color: var(--sf2);
+  color: var(--tx);
+  border: 1px solid var(--br);
+}
+.btn-secondary:hover {
+  border-color: var(--kh);
+  color: var(--kh);
+}
+
+/* Alerts */
+.alert-error {
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 13px;
+  background-color: rgba(239, 68, 68, 0.15); /* red-500/15 */
+  border: 1px solid rgba(239, 68, 68, 0.4); /* red-500/40 */
+  color: #ef4444; /* red-500 */
+}
