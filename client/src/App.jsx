@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './pages/Login';
+import CandidateLogin from './pages/CandidateLogin';
+import AdminLogin from './pages/AdminLogin';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Questions from './pages/Questions';
@@ -8,6 +9,7 @@ import Exams from './pages/Exams';
 import Results from './pages/Results';
 import Candidates from './pages/Candidates';
 import MyExams from './pages/MyExams';
+import ExamPortal from './pages/ExamPortal';
 import UserAccounts from './pages/UserAccounts';
 
 // Placeholder components for routes
@@ -50,8 +52,20 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={
         <PublicRoute>
-          <Login />
+          <CandidateLogin />
         </PublicRoute>
+      } />
+      
+      <Route path="/admin-login" element={
+        <PublicRoute>
+          <AdminLogin />
+        </PublicRoute>
+      } />
+
+      <Route path="/exam-session/:examId" element={
+        <ProtectedRoute allowedRoles={['candidate']}>
+          <ExamPortal />
+        </ProtectedRoute>
       } />
       
       <Route path="/" element={

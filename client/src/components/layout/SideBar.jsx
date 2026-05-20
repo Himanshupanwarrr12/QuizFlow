@@ -13,8 +13,47 @@ const NAV_ITEMS = [
 
 export default function SideBar() {
   const { user, logout } = useAuth();
+  const isCandidate = user?.role === 'candidate';
 
   const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(user?.role));
+
+  if (isCandidate) {
+    return (
+      <div className="w-[230px] bg-white border-r border-slate-200/80 py-6 shrink-0 overflow-y-auto flex flex-col justify-between select-none font-sans">
+        <div>
+          <div className="flex flex-col gap-1 px-2 pt-2">
+            {visibleItems.map(item => (
+              <NavLink
+                key={item.id}
+                to={item.path}
+                className={({ isActive }) => `
+                  flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer text-[13px] font-sans tracking-[0.5px] uppercase transition-all duration-300 ease-out border-l-2
+                  ${isActive 
+                    ? 'bg-slate-50 text-[#0c1240] border-[#0c1240] font-bold translate-x-[2px]' 
+                    : 'text-slate-500 border-transparent hover:bg-slate-50/50 hover:text-slate-800 hover:translate-x-[2px]'}
+                `}
+              >
+                <span className="w-6 h-6 rounded bg-slate-50 border border-slate-200/60 flex items-center justify-center text-[12px] shadow-sm">
+                  {item.icon}
+                </span>
+                <span className="font-semibold">{item.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-5 pt-5 border-t border-slate-100 mt-auto">
+          <button 
+            onClick={logout}
+            className="w-full bg-white border border-slate-200 text-slate-500 cursor-pointer py-3 rounded-lg font-sans text-[11px] tracking-[1.5px] uppercase transition-all duration-300 hover:border-red-300 hover:bg-red-50 hover:text-red-600 flex items-center justify-center gap-2 group font-semibold shadow-sm"
+          >
+            <span className="text-[12px] group-hover:rotate-90 transition-transform duration-300">⏻</span> 
+            <span>LOGOUT SYSTEM</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-[230px] bg-sf/60 backdrop-blur-md border-r border-br/50 py-6 shrink-0 overflow-y-auto flex flex-col justify-between shadow-lg shadow-black/10 select-none">
