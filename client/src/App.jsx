@@ -80,11 +80,7 @@ function AppRoutes() {
             <Exams />
           </ProtectedRoute>
         } />
-        <Route path="monitor" element={
-          <ProtectedRoute allowedRoles={['super_admin', 'exam_officer']}>
-            <Placeholder title="Live Monitor" />
-          </ProtectedRoute>
-        } />
+
         <Route path="results" element={
           <ProtectedRoute allowedRoles={['super_admin', 'exam_officer']}>
             <Results />

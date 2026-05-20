@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { examService, candidateService } from '../services/api';
 
@@ -68,6 +69,32 @@ export default function MyExams({ hideHeader = false }) {
 
     return () => clearInterval(timer);
   }, [activeSession, timeLeft]);
+
+  // Keyboard shortcut listener: Enter key moves to next question or finishes
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!activeSession) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        const questionsList = activeSession.questions || [];
+        const isLast = currentIdx === questionsList.length - 1;
+        
+        if (isLast) {
+          if (showConfirmSubmit) {
+            handleSubmitExam(false);
+          } else {
+            setShowConfirmSubmit(true);
+          }
+        } else {
+          setCurrentIdx(prev => prev + 1);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeSession, currentIdx, showConfirmSubmit, selectedAnswers]);
 
   const handleStartExam = async (exam) => {
     try {
@@ -195,46 +222,78 @@ export default function MyExams({ hideHeader = false }) {
     const currentQuestion = questionsList[currentIdx];
     const isLastQuestion = currentIdx === questionsList.length - 1;
 
-    return (
-      <div className="fixed inset-0 z-50 bg-bg flex flex-col font-mn">
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] bg-bg flex flex-col font-mn">
         {/* Header Block */}
         <div className="bg-sf border-b border-br px-6 py-4 flex justify-between items-center shrink-0">
-          <div>
-            <div className="font-hd text-[20px] tracking-[1px] text-kh uppercase">
+          {/* Top Left: Previous Button */}
+          <button
+            disabled={currentIdx === 0}
+            onClick={() => setCurrentIdx(prev => prev - 1)}
+            className="btn bg-sf border border-br text-txm hover:border-kh transition-colors py-2 px-4 rounded font-mn text-[11px] uppercase disabled:opacity-30 flex items-center space-x-1.5"
+          >
+            <span>◀</span> <span>PREVIOUS</span>
+          </button>
+
+          {/* Center Info and Timer */}
+          <div className="flex flex-col items-center text-center">
+            <div className="font-hd text-[26px] tracking-[2px] text-kh uppercase font-bold">
               {activeSession.exam.title}
             </div>
-            <div className="text-[10px] text-txd mt-1 tracking-[1.5px] uppercase">
-              SUBJECT: {activeSession.exam.subject} · ATTEMPT SESSION
+            <div className="text-[14px] text-khl mt-1.5 tracking-[1px] uppercase flex items-center space-x-3 font-mn">
+              <span>SUBJECT: <strong className="text-white">{activeSession.exam.subject}</strong></span>
+              <span className="text-br">•</span>
+              <span className="flex items-center space-x-1.5">
+                <span>TIME LEFT:</span>
+                <strong className={`text-[15px] px-2.5 py-0.5 rounded border font-mono tracking-[1.5px] ${
+                  timeLeft < 60 
+                    ? 'text-rose-400 bg-rose-950/40 border-rose-800 animate-pulse' 
+                    : 'text-am bg-am/10 border-am/30 font-bold'
+                }`}>
+                  {formatTime(timeLeft)}
+                </strong>
+              </span>
             </div>
           </div>
-          <div className="flex items-center space-x-3 bg-oldd border border-br rounded px-4 py-2">
-            <span className="text-[11px] text-txm uppercase">TIME REMAINING</span>
-            <span className={`font-hd text-[22px] tracking-[1px] ${timeLeft < 60 ? 'text-rose-500 animate-pulse' : 'text-am'}`}>
-              {formatTime(timeLeft)}
-            </span>
-          </div>
+
+          {/* Top Right: Next / Finish Button */}
+          {isLastQuestion ? (
+            <button
+              onClick={() => setShowConfirmSubmit(true)}
+              className="btn bg-am hover:bg-am/90 text-oldd transition-all py-2 px-4 rounded font-mn text-[11px] uppercase font-bold tracking-[1px] flex items-center"
+            >
+              FINISH ASSESSMENT ⚡
+            </button>
+          ) : (
+            <button
+              onClick={() => setCurrentIdx(prev => prev + 1)}
+              className="btn bg-sf border border-br text-kh hover:border-kh transition-colors py-2 px-4 rounded font-mn text-[11px] uppercase flex items-center space-x-1.5"
+            >
+              <span>NEXT QUESTION</span> <span>▶</span>
+            </button>
+          )}
         </div>
 
         {/* Workspace Grid */}
         <div className="flex-1 overflow-hidden flex">
           {/* Main Area */}
-          <div className="flex-1 p-8 overflow-y-auto flex flex-col justify-between">
-            <div className="max-w-3xl mx-auto w-full space-y-6">
+          <div className="flex-1 p-10 overflow-y-auto flex flex-col justify-between">
+            <div className="max-w-4xl mx-auto w-full space-y-6">
               {/* Question metadata badge */}
-              <div className="flex justify-between items-center text-[11px] uppercase tracking-[1px] text-txm border-b border-br/60 pb-3">
+              <div className="flex justify-between items-center text-[16px] font-bold uppercase tracking-[1.5px] text-khl border-b border-br/60 pb-3.5 font-hd">
                 <span>QUESTION {currentIdx + 1} OF {activeSession.questions.length}</span>
-                <span className="px-2 py-0.5 bg-am/10 border border-am/20 text-am rounded-sm">
-                  {currentQuestion.marks} MARKS
+                <span className="px-2.5 py-0.5 bg-am/15 border border-am/30 text-am rounded text-[11px] font-mn tracking-[0.5px] font-bold">
+                  1 MARK
                 </span>
               </div>
 
               {/* Question text */}
-              <div className="font-hd text-[22px] text-kh leading-relaxed">
+              <div className="font-hd text-[24px] text-kh leading-relaxed font-bold tracking-[0.5px] py-1">
                 {currentQuestion.text}
               </div>
 
               {/* Answer options */}
-              <div className="space-y-3 pt-4">
+              <div className="space-y-4 pt-4">
                 {currentQuestion.type === 'mcq' && (
                   ['A', 'B', 'C', 'D'].map(opt => {
                     const labelKey = `option${opt}`;
@@ -247,18 +306,18 @@ export default function MyExams({ hideHeader = false }) {
                       <button
                         key={opt}
                         onClick={() => handleSelectOption(currentQuestion.id, opt)}
-                        className={`w-full text-left p-4 rounded-md border font-mn text-[14px] transition-all flex items-center space-x-4 ${
+                        className={`w-full text-left p-5 rounded-lg border font-mn text-[15px] transition-all flex items-center space-x-5 shadow-sm ${
                           isSelected
                             ? 'bg-am/10 border-am text-kh'
                             : 'bg-sf border-br text-txm hover:border-am/50'
                         }`}
                       >
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[13px] ${
                           isSelected ? 'bg-am text-oldd' : 'bg-sf2 border border-br text-txm'
                         }`}>
                           {opt}
                         </span>
-                        <span>{optText}</span>
+                        <span className="font-medium text-khl">{optText}</span>
                       </button>
                     );
                   })
@@ -273,18 +332,18 @@ export default function MyExams({ hideHeader = false }) {
                       <button
                         key={opt}
                         onClick={() => handleSelectOption(currentQuestion.id, opt)}
-                        className={`w-full text-left p-4 rounded-md border font-mn text-[14px] transition-all flex items-center space-x-4 ${
+                        className={`w-full text-left p-5 rounded-lg border font-mn text-[15px] transition-all flex items-center space-x-5 shadow-sm ${
                           isSelected
                             ? 'bg-am/10 border-am text-kh'
                             : 'bg-sf border-br text-txm hover:border-am/50'
                         }`}
                       >
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[13px] ${
                           isSelected ? 'bg-am text-oldd' : 'bg-sf2 border border-br text-txm'
                         }`}>
                           {opt}
                         </span>
-                        <span>{label}</span>
+                        <span className="font-medium text-khl">{label}</span>
                       </button>
                     );
                   })
@@ -296,52 +355,29 @@ export default function MyExams({ hideHeader = false }) {
                     value={selectedAnswers[currentQuestion.id] || ""}
                     onChange={(e) => handleSelectOption(currentQuestion.id, e.target.value)}
                     placeholder="Type your fill-in-the-blank response here..."
-                    className="form-input bg-sf text-[14px] h-[50px] w-full mt-2"
+                    className="form-input bg-sf text-[16px] h-[56px] w-full mt-2 rounded-lg px-5 border-br/80 font-medium text-khl"
                   />
                 )}
               </div>
             </div>
 
             {/* Navigation Footer */}
-            <div className="max-w-3xl mx-auto w-full flex justify-between border-t border-br pt-6 mt-8 shrink-0">
-              <button
-                disabled={currentIdx === 0}
-                onClick={() => setCurrentIdx(prev => prev - 1)}
-                className="btn bg-sf border border-br text-txm hover:border-kh transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase disabled:opacity-30"
-              >
-                ◀ PREVIOUS
-              </button>
-
-              <div className="flex items-center space-x-1.5">
+            <div className="max-w-4xl mx-auto w-full flex justify-center border-t border-br pt-6 mt-8 shrink-0">
+              <div className="flex items-center space-x-2">
                 {activeSession.questions.map((_, i) => (
-                  <div
+                  <button
                     key={i}
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
+                    onClick={() => setCurrentIdx(i)}
+                    className={`w-3 h-3 rounded-full transition-all border ${
                       i === currentIdx
-                        ? 'bg-am scale-125'
+                        ? 'bg-am border-am scale-125 shadow-sm shadow-am/50'
                         : selectedAnswers[activeSession.questions[i].id]
-                          ? 'bg-kh/60'
-                          : 'bg-sf border border-br'
+                          ? 'bg-kh/60 border-kh/60'
+                          : 'bg-sf border-br hover:border-am/50'
                     }`}
-                  ></div>
+                  ></button>
                 ))}
               </div>
-
-              {isLastQuestion ? (
-                <button
-                  onClick={() => setShowConfirmSubmit(true)}
-                  className="btn bg-am hover:bg-am/90 text-oldd transition-all py-2.5 px-6 rounded font-mn text-[12px] uppercase font-bold tracking-[1px]"
-                >
-                  FINISH ASSESSMENT ⚡
-                </button>
-              ) : (
-                <button
-                  onClick={() => setCurrentIdx(prev => prev + 1)}
-                  className="btn bg-sf border border-br text-kh hover:border-kh transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase"
-                >
-                  NEXT QUESTION ▶
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -375,7 +411,8 @@ export default function MyExams({ hideHeader = false }) {
             </div>
           </div>
         )}
-      </div>
+      </div>,
+      document.body
     );
   }
 
@@ -445,9 +482,6 @@ export default function MyExams({ hideHeader = false }) {
                       <div className="bg-sf2 border border-br text-center py-2.5 rounded font-mn text-[11px] text-txm tracking-[1px] uppercase flex items-center justify-center space-x-1.5">
                         <span>✔ COMPLETED · SCORE:</span>
                         <strong className="text-green-400">{status.score} MARKS</strong>
-                      </div>
-                      <div className="font-mn text-[9.5px] text-txd text-center uppercase tracking-[0.5px]">
-                        Quiz: {status.quizScore} | Prac: {status.practicalMarks} | Viva: {status.vivaMarks} | Subj: {status.subjectiveMarks}
                       </div>
                     </div>
                   ) : (

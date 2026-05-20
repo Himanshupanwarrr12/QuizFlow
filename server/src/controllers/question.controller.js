@@ -55,7 +55,10 @@ export const uploadQuestions = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json(
-    new ApiResponse(201, { count: createdQuestions.length }, `${createdQuestions.length} questions uploaded successfully.`)
+    new ApiResponse(201, { 
+      count: createdQuestions.length,
+      questions: createdQuestions
+    }, `${createdQuestions.length} questions uploaded successfully.`)
   );
 });
 

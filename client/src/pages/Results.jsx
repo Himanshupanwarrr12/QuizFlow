@@ -121,7 +121,11 @@ export default function Results() {
         examService.getExams()
       ]);
 
-      setResults(resultsRes.data?.results || []);
+      const allResults = resultsRes.data?.results || [];
+      const fullyGradedResults = allResults.filter(
+        row => row.practicalMarks !== null && row.vivaMarks !== null
+      );
+      setResults(fullyGradedResults);
       setExams(examsRes.data?.exams || []);
     } catch (err) {
       console.error("Failed to load evaluations data:", err);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { examService, questionService, candidateService, resultService } from '../services/api';
 
 const AVAILABLE_UNITS = [
@@ -18,7 +18,10 @@ const defaultForm = {
   shuffleOptions: false,
   showResult: true,
   instructions: '1. All questions are compulsory.\n2. Do not switch tabs during the exam.\n3. Submit before timer expires.',
-  questionIds: []
+  questionIds: [],
+  mcqCount: '',
+  fillblankCount: '',
+  truefalseCount: ''
 };
 
 export default function Exams() {
@@ -30,6 +33,84 @@ export default function Exams() {
   const [formData, setFormData] = useState(defaultForm);
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formDataUpload = new FormData();
+    formDataUpload.append('file', file);
+
+    try {
+      setUploading(true);
+      const res = await questionService.uploadQuestions(formDataUpload);
+      
+      e.target.value = null; // Clear input value
+      
+      if (res.data && res.data.questions) {
+        const newQuestions = res.data.questions;
+        const newQuestionIds = newQuestions.map(q => q.id);
+        
+        // Refresh question list in state so they are rendered
+        await fetchData();
+        
+        // Replace selected questions with only the newly imported ones and force randomizeOrder to true
+        let mcq = 0;
+        let fill = 0;
+        let tf = 0;
+        newQuestions.forEach(q => {
+          if (q.type === 'mcq') mcq++;
+          else if (q.type === 'fillblank') fill++;
+          else if (q.type === 'truefalse') tf++;
+        });
+
+        setFormData(prev => ({
+          ...prev,
+          questionIds: newQuestionIds,
+          randomizeOrder: true,
+          mcqCount: mcq,
+          fillblankCount: fill,
+          truefalseCount: tf
+        }));
+        
+        alert(`Successfully imported ${res.data.count} questions for this exam! Counts updated to ${mcq} MCQs, ${fill} Fillups, and ${tf} True/False. Order of questions is randomized.`);
+      } else {
+        alert('Imported questions, but did not receive database records.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to upload questions');
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleTemplateDownload = () => {
+    const csvHeaders = ["type", "text", "option_A", "option_B", "option_C", "option_D", "correct_options(A,B,C...)", "category", "subject", "topic", "difficulty", "bloom", "marks", "explanation"];
+    const csvRows = [
+      ["mcq", "What is the primary role of a Combat Engineer?", "Bridging", "Breaching", "Mine Warfare", "All of the above", "D", "Must Know", "Combat Engineering", "Fundamentals", "Medium", "Knowledge", "2", "Combat engineers do bridging, breaching and mines."],
+      ["truefalse", "Earth is round.", "True", "False", "", "", "A", "Could Know", "Science", "Earth", "Easy", "Knowledge", "1", "Yes, Earth is an oblate spheroid."],
+      ["fillblank", "The speed of light is _____ km/s.", "", "", "", "", "299792", "Must Know", "Physics", "Light", "Hard", "Knowledge", "2", "Speed of light is 299792 km/s."]
+    ];
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [csvHeaders.join(","), ...csvRows.map(r => r.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))].join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "quizflow_question_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   // State for the new Grading Console Feature
   const [gradingConsoleOpen, setGradingConsoleOpen] = useState(false);
@@ -228,6 +309,20 @@ export default function Exams() {
   const handleEditClick = (exam) => {
     const selectedQuestionIds = exam.questions.map(eq => eq.questionId);
     const unitsList = exam.units ? exam.units.split(", ").map(u => u.trim()) : [];
+    
+    // Count question types from the existing exam
+    let mcq = 0;
+    let fill = 0;
+    let tf = 0;
+    exam.questions.forEach(eq => {
+      const q = eq.question;
+      if (q) {
+        if (q.type === 'mcq') mcq++;
+        else if (q.type === 'fillblank') fill++;
+        else if (q.type === 'truefalse') tf++;
+      }
+    });
+
     setFormData({
       title: exam.title || '',
       code: exam.code || '',
@@ -240,7 +335,10 @@ export default function Exams() {
       shuffleOptions: exam.shuffleOptions ?? false,
       showResult: exam.showResult ?? true,
       instructions: exam.instructions || '',
-      questionIds: selectedQuestionIds
+      questionIds: selectedQuestionIds,
+      mcqCount: mcq,
+      fillblankCount: fill,
+      truefalseCount: tf
     });
     setEditingExamId(exam.id);
     setShowModal(true);
@@ -249,14 +347,46 @@ export default function Exams() {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title) return alert("Exam title is required.");
-    if (formData.questionIds.length === 0) return alert("Please select at least one question.");
+
+    // Randomly pick questionIds matching the specified type counts
+    const mcqQuestions = questions.filter(q => q.type === 'mcq');
+    const fillblankQuestions = questions.filter(q => q.type === 'fillblank');
+    const truefalseQuestions = questions.filter(q => q.type === 'truefalse');
+
+    const shuffleArray = (arr) => {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
+
+    const selectedMcq = shuffleArray(mcqQuestions).slice(0, parseInt(formData.mcqCount) || 0);
+    const selectedFill = shuffleArray(fillblankQuestions).slice(0, parseInt(formData.fillblankCount) || 0);
+    const selectedTF = shuffleArray(truefalseQuestions).slice(0, parseInt(formData.truefalseCount) || 0);
+
+    const chosenQuestionIds = [
+      ...selectedMcq.map(q => q.id),
+      ...selectedFill.map(q => q.id),
+      ...selectedTF.map(q => q.id)
+    ];
+
+    if (chosenQuestionIds.length === 0) {
+      return alert("Please select at least one question by specifying MCQs, Fillups, or True/False count greater than 0.");
+    }
+
+    const payload = {
+      ...formData,
+      questionIds: chosenQuestionIds
+    };
 
     try {
       setSubmitting(true);
       if (editingExamId) {
-        await examService.updateExam(editingExamId, formData);
+        await examService.updateExam(editingExamId, payload);
       } else {
-        await examService.createExam(formData);
+        await examService.createExam(payload);
       }
       setShowModal(false);
       setFormData(defaultForm);
@@ -283,12 +413,21 @@ export default function Exams() {
             CREATE · SCHEDULE · ACTIVATE · MANAGE
           </div>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-5 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center"
-        >
-          <span className="mr-2">+</span> CREATE EXAMINATION
-        </button>
+        <div className="flex space-x-3">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => setShowModal(true)}
+            className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-5 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center"
+          >
+            <span className="mr-2">+</span> CREATE EXAMINATION
+          </button>
+        </div>
       </div>
 
       {/* Loading state */}
@@ -340,12 +479,12 @@ export default function Exams() {
                   </button>
                 </div>
 
-                 {/* Give Marks Action */}
+                 {/* Add Marks Action */}
                 <button 
                   onClick={() => handleOpenGradingConsole(exam)}
                   className="btn bg-green-950/40 border border-green-800/60 hover:bg-green-900/40 text-green-400 transition-all py-1.5 px-3 rounded font-mn text-[10px] uppercase tracking-[1px] font-bold"
                 >
-                  📊 Give Marks
+                  📊 Add Marks
                 </button>
 
                 {/* Review / Edit action */}
@@ -552,53 +691,66 @@ export default function Exams() {
                 />
               </div>
 
-              {/* Question Selection */}
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <label className="form-label mb-0">Select Questions ({formData.questionIds.length} Selected)</label>
-                  <select 
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="form-input bg-sf text-white py-1 px-3 max-w-[200px] text-[11px]"
-                  >
-                    <option value="All">All Categories</option>
-                    <option value="Must Know">Must Know</option>
-                    <option value="Could Know">Could Know</option>
-                    <option value="May Know">May Know</option>
-                  </select>
+              {/* Question Selection Section */}
+              <div className="border-t border-br pt-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <label className="form-label mb-0 text-kh tracking-[1px] uppercase text-[12px]">Auto-Select Questions from Pool</label>
+                    <div className="text-[10px] text-txm uppercase mt-0.5">Specify counts to randomly choose questions for this exam</div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      type="button"
+                      onClick={handleTemplateDownload}
+                      className="btn bg-sf border border-br text-[10px] text-txm hover:border-am transition-colors py-1.5 px-2.5 rounded font-mn tracking-[0.5px] uppercase flex items-center"
+                    >
+                      Template
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={handleImportClick}
+                      disabled={uploading}
+                      className="btn bg-[#2980b9] hover:bg-[#3498db] text-white transition-colors py-1.5 px-2.5 rounded font-mn text-[10px] tracking-[0.5px] uppercase flex items-center disabled:opacity-50"
+                    >
+                      {uploading ? 'UPLOADING...' : 'IMPORT CSV'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* List of questions */}
-                <div className="border border-br rounded-md p-3 bg-sf2 max-h-[220px] overflow-y-auto space-y-2">
-                  {filteredQuestions.length === 0 && (
-                    <div className="text-center py-6 font-mn text-txm text-[12px]">No questions available. Add questions in the Question Bank module.</div>
-                  )}
-                  {filteredQuestions.map(q => {
-                    const isSelected = formData.questionIds.includes(q.id);
-                    return (
-                      <div 
-                        key={q.id}
-                        onClick={() => handleQuestionSelect(q.id)}
-                        className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-all duration-200 ${
-                          isSelected 
-                            ? 'bg-am/5 border-am shadow-sm' 
-                            : 'bg-sf border-br hover:border-kh'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span className={`px-2 py-0.5 rounded font-mn text-[8px] uppercase tracking-[1px] ${
-                            q.type === 'mcq' ? 'bg-[#7c3aed]/15 text-[#a78bfa] border border-[#7c3aed]/25' :
-                            q.type === 'truefalse' ? 'bg-[#2980b9]/15 text-[#3498db] border border-[#2980b9]/25' :
-                            'bg-[#d4830a]/15 text-[#fcd34d] border border-[#d4830a]/25'
-                          }`}>
-                            {q.type === 'truefalse' ? 'T/F' : q.type === 'fillblank' ? 'FILL' : 'MCQ'}
-                          </span>
-                          <span className="font-mn text-[13px] text-txm line-clamp-1">{q.text}</span>
-                        </div>
-                        <span className="font-mn text-[11px] text-kh font-semibold ml-4">{q.marks}M</span>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-3 gap-4 bg-sf2 border border-br rounded-md p-4">
+                  <div>
+                    <label className="form-label text-[11px]">MCQs Count</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={formData.mcqCount}
+                      onChange={(e) => setFormData({ ...formData, mcqCount: e.target.value })}
+                      className="form-input bg-sf text-white" 
+                    />
+                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'mcq').length}</span></div>
+                  </div>
+                  <div>
+                    <label className="form-label text-[11px]">Fillups Count</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={formData.fillblankCount}
+                      onChange={(e) => setFormData({ ...formData, fillblankCount: e.target.value })}
+                      className="form-input bg-sf text-white" 
+                    />
+                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'fillblank').length}</span></div>
+                  </div>
+                  <div>
+                    <label className="form-label text-[11px]">True/False Count</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={formData.truefalseCount}
+                      onChange={(e) => setFormData({ ...formData, truefalseCount: e.target.value })}
+                      className="form-input bg-sf text-white" 
+                    />
+                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'truefalse').length}</span></div>
+                  </div>
                 </div>
               </div>
 
@@ -758,7 +910,7 @@ export default function Exams() {
                                   onClick={() => handleOpenCandidateGradeForm(candidate, null)}
                                   className="btn bg-green-950 border border-green-800 hover:bg-green-900 text-green-400 py-1.5 px-4 rounded text-[11px] uppercase tracking-[0.5px] font-bold"
                                 >
-                                  ✍ Give Marks
+                                  ✍ Add Marks
                                 </button>
                               )}
                             </td>

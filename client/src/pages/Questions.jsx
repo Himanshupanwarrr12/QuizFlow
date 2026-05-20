@@ -26,6 +26,8 @@ export default function Questions() {
   const [showModal, setShowModal] = useState(false);
   const [formQuestion, setFormQuestion] = useState(defaultQuestion);
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState('all');
   const fileInputRef = useRef(null);
 
   const fetchQuestions = async () => {
@@ -160,13 +162,25 @@ export default function Questions() {
     }
   };
 
+  // Client-side question filtering
+  const filteredQuestions = questions.filter(q => {
+    const matchesSearch = !searchQuery.trim() || 
+      q.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (q.topic && q.topic.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesType = selectedType === 'all' || q.type === selectedType;
+
+    return matchesSearch && matchesType;
+  });
+
   return (
     <div>
       <div className="flex justify-between items-end mb-6">
         <div>
           <div className="font-hd text-[34px] tracking-[3px] text-kh leading-none">QUESTION BANK</div>
           <div className="font-mn text-[10px] text-txd mt-1 uppercase tracking-[1px]">
-            {questions.length} QUESTIONS · MCQ · TRUE/FALSE · FILL IN BLANKS
+            {filteredQuestions.length} OF {questions.length} QUESTIONS · MCQ · TRUE/FALSE · FILL IN BLANKS
           </div>
         </div>
         <div className="flex space-x-3">
@@ -207,12 +221,22 @@ export default function Questions() {
       </div>
 
       <div className="flex space-x-3 mb-6">
-        <input type="text" placeholder="Search questions..." className="form-input bg-sf max-w-xs" />
-        <select className="form-input bg-sf max-w-[200px]">
-          <option>All Categories</option>
-        </select>
-        <select className="form-input bg-sf max-w-[200px]">
-          <option>All Types</option>
+        <input 
+          type="text" 
+          placeholder="Search questions..." 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="form-input bg-sf max-w-xs" 
+        />
+        <select 
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value)}
+          className="form-input bg-sf max-w-[200px] text-white"
+        >
+          <option value="all">All Types</option>
+          <option value="mcq">MCQ</option>
+          <option value="truefalse">True/False</option>
+          <option value="fillblank">Fill in Blanks</option>
         </select>
       </div>
 
@@ -236,12 +260,12 @@ export default function Questions() {
               <tr>
                 <td colSpan="7" className="py-12 text-center text-txm font-mn text-[13px]">Loading questions...</td>
               </tr>
-            ) : questions.length === 0 ? (
+            ) : filteredQuestions.length === 0 ? (
               <tr>
-                <td colSpan="7" className="py-12 text-center text-txm font-mn text-[13px]">No questions found. Click "IMPORT CSV" to upload.</td>
+                <td colSpan="7" className="py-12 text-center text-txm font-mn text-[13px]">No matching questions found.</td>
               </tr>
             ) : (
-              questions.map((q, index) => (
+              filteredQuestions.map((q, index) => (
                 <tr key={q.id} className="border-b border-br last:border-0 hover:bg-sf2/30 transition-colors">
                   <td className="py-4 px-5 font-mn text-[11px] text-txm">
                     {(index + 1).toString().padStart(2, '0')}

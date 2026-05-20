@@ -257,8 +257,8 @@ export const initializeAttempt = asyncHandler(async (req, res) => {
       submitTime: new Date(),
       status: "submitted",
       totalMarks: 0,
-      practicalMarks: 0,
-      vivaMarks: 0,
+      practicalMarks: null,
+      vivaMarks: null,
       subjectiveMarks: 0
     },
     include: {

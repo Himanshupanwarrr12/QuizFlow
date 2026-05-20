@@ -42,22 +42,6 @@ export default function Dashboard() {
   if (user?.role === 'candidate') {
     return (
       <div className="space-y-6">
-        {/* ── Candidate Welcome Control Banner ─────────────────────────────────── */}
-        <div className="bg-gradient-to-r from-sf to-sf/60 border border-br rounded-md p-6 relative overflow-hidden">
-          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-am/5 pointer-events-none transform -skew-x-12"></div>
-          
-          <div className="font-mn text-[10px] text-am tracking-[2px] uppercase">CANDIDATE ASSESSMENT STATION</div>
-          <div className="font-hd text-[38px] text-kh leading-none mt-1 tracking-[1px] uppercase">
-            WELCOME, {user?.rank} {user?.name}
-          </div>
-          
-          <div className="font-mn text-[12.5px] text-txm mt-3 max-w-2xl leading-relaxed">
-            You are successfully authenticated inside the BEG ROORKEE Secure Portal. 
-            Assigned Unit: <span className="text-kh font-semibold">{user?.unit}</span> · 
-            Specialist Trade: <span className="text-kh font-semibold">{user?.trade}</span>.
-          </div>
-        </div>
-
         {/* ── Simple and Direct Roster Listing ─────────────────────────────────── */}
         <MyExams hideHeader={true} />
       </div>
@@ -115,20 +99,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* ── Welcome Control Banner ─────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-sf to-sf/60 border border-br rounded-md p-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-am/5 pointer-events-none transform -skew-x-12"></div>
-        
-        <div className="font-mn text-[10px] text-am tracking-[2px] uppercase">OPERATIONAL COMMAND STATION</div>
-        <div className="font-hd text-[38px] text-kh leading-none mt-1 tracking-[1px] uppercase">
-          WELCOME, {user?.rank} {user?.name}
-        </div>
-        
-        <div className="font-mn text-[12px] text-txm mt-2 max-w-2xl leading-relaxed">
-          Authorized under <strong className="text-kh">{user?.role === 'super_admin' ? 'Super Admin' : 'Exam Officer'}</strong> clearance levels. 
-          Assigned Unit: <span className="text-kh font-semibold">{user?.unit || 'HQ BEG'}</span>.
-        </div>
-      </div>
 
       {/* ── Dynamic Statistics Control Grid ─────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

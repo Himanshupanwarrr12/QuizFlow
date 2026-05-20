@@ -83,13 +83,13 @@ const seedSuperAdmin = async () => {
       console.log("");
     }
 
-    // 3. Seed default Candidate for testing (Spr Himanshu)
-    const existingCandidate = await prisma.user.findFirst({
+    // 3. Seed default Candidate 1 for testing (Spr Himanshu)
+    const existingCandidate1 = await prisma.user.findFirst({
       where: { role: "candidate", armyNumber: "CAND0001" },
     });
 
-    if (existingCandidate) {
-      console.log(`⚠️  Candidate already exists: ${existingCandidate.armyNumber} (${existingCandidate.name})`);
+    if (existingCandidate1) {
+      console.log(`⚠️  Candidate 1 already exists: ${existingCandidate1.armyNumber} (${existingCandidate1.name})`);
     } else {
       const candidateHashedPassword = await bcrypt.hash("Password@123", 10);
       const candidate = await prisma.user.create({
@@ -104,7 +104,35 @@ const seedSuperAdmin = async () => {
         },
       });
 
-      console.log("✅  Default Candidate seeded successfully:");
+      console.log("✅  Default Candidate 1 seeded successfully:");
+      console.log(`   Army Number : ${candidate.armyNumber}`);
+      console.log(`   Name        : ${candidate.name}`);
+      console.log(`   Role        : ${candidate.role}`);
+      console.log("");
+    }
+
+    // 4. Seed default Candidate 2 for testing (Spr Amit)
+    const existingCandidate2 = await prisma.user.findFirst({
+      where: { role: "candidate", armyNumber: "CAND0002" },
+    });
+
+    if (existingCandidate2) {
+      console.log(`⚠️  Candidate 2 already exists: ${existingCandidate2.armyNumber} (${existingCandidate2.name})`);
+    } else {
+      const candidateHashedPassword = await bcrypt.hash("Password@123", 10);
+      const candidate = await prisma.user.create({
+        data: {
+          armyNumber: "CAND0002",
+          rank: "Spr",
+          name: "Amit Kumar",
+          unit: "21 Engr Regt",
+          trade: "Field Engineer",
+          password: candidateHashedPassword,
+          role: "candidate",
+        },
+      });
+
+      console.log("✅  Default Candidate 2 seeded successfully:");
       console.log(`   Army Number : ${candidate.armyNumber}`);
       console.log(`   Name        : ${candidate.name}`);
       console.log(`   Role        : ${candidate.role}`);

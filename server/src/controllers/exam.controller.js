@@ -40,7 +40,7 @@ export const createExam = asyncHandler(async (req, res) => {
     throw new ApiError(400, "None of the selected questions exist.");
   }
 
-  const totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const totalMarks = questions.length;
 
   // Store units as comma-separated string if passed as array
   const formattedUnits = Array.isArray(units) ? units.join(", ") : (units || "All Units");
@@ -178,7 +178,7 @@ export const updateExam = asyncHandler(async (req, res) => {
     if (questions.length === 0) {
       throw new ApiError(400, "None of the selected questions exist.");
     }
-    totalMarks = questions.reduce((sum, q) => sum + (q.marks || 0), 0);
+    totalMarks = questions.length;
   }
 
   // Store units as comma-separated string if passed as array

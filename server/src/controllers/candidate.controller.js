@@ -81,14 +81,15 @@ export const startExamAttempt = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Maximum attempts limit reached for this examination.");
   }
 
-  // 3. Create the attempt with "started" status
   const attempt = await prisma.attempt.create({
     data: {
       examId,
       candidateId: req.user.id,
       startTime: new Date(),
       status: "started",
-      totalMarks: 0
+      totalMarks: 0,
+      practicalMarks: null,
+      vivaMarks: null
     }
   });
 
@@ -141,7 +142,7 @@ export const submitExamAttempt = asyncHandler(async (req, res) => {
 
     const q = examQ.question;
     const isCorrect = q.correctOptions.toLowerCase().trim() === (selectedOption || "").toLowerCase().trim();
-    const marksAwarded = isCorrect ? q.marks : 0;
+    const marksAwarded = isCorrect ? 1 : 0;
     totalScore += marksAwarded;
 
     const savedResponse = await prisma.response.create({
