@@ -2,90 +2,62 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const NAV_ITEMS = [
-  { id: "dashboard", path: "/", icon: "📊", label: "Dashboard", roles: ["super_admin", "exam_officer", "candidate"] },
-  { id: "user-accounts", path: "/user-accounts", icon: "👥", label: "User Accounts", roles: ["super_admin"] },
-  { id: "candidates", path: "/candidates", icon: "🎖️", label: "Candidates", roles: ["super_admin", "exam_officer"] },
-  { id: "questions", path: "/questions", icon: "📝", label: "Question Bank", roles: ["super_admin", "exam_officer"] },
-  { id: "exams", path: "/exams", icon: "📋", label: "Examinations", roles: ["super_admin", "exam_officer"] },
-  { id: "results", path: "/results", icon: "📈", label: "Results", roles: ["super_admin", "exam_officer"] },
-  { id: "myexams", path: "/my-exams", icon: "✏️", label: "My Exams", roles: [] },
+  { id: "dashboard", path: "/", icon: "⊞", label: "Dashboard", roles: ["super_admin", "exam_officer", "candidate"] },
+  { id: "user-accounts", path: "/user-accounts", icon: "◈", label: "User Accounts", roles: ["super_admin"] },
+  { id: "candidates", path: "/candidates", icon: "◉", label: "Candidates", roles: ["super_admin", "exam_officer"] },
+  { id: "questions", path: "/questions", icon: "◧", label: "Question Bank", roles: ["super_admin", "exam_officer"] },
+  { id: "exams", path: "/exams", icon: "◫", label: "Examinations", roles: ["super_admin", "exam_officer"] },
+  { id: "results", path: "/results", icon: "◻", label: "Results", roles: ["super_admin", "exam_officer"] },
+  { id: "myexams", path: "/my-exams", icon: "◈", label: "My Exams", roles: ["candidate"] },
 ];
 
 export default function SideBar() {
   const { user, logout } = useAuth();
-  const isCandidate = user?.role === 'candidate';
-
   const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(user?.role));
 
-  if (isCandidate) {
-    return (
-      <div className="w-[230px] bg-white border-r border-slate-200/80 py-6 shrink-0 overflow-y-auto flex flex-col justify-between select-none font-sans">
-        <div>
-          <div className="flex flex-col gap-1 px-2 pt-2">
-            {visibleItems.map(item => (
-              <NavLink
-                key={item.id}
-                to={item.path}
-                className={({ isActive }) => `
-                  flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer text-[13px] font-sans tracking-[0.5px] uppercase transition-all duration-300 ease-out border-l-2
-                  ${isActive 
-                    ? 'bg-slate-50 text-[#0c1240] border-[#0c1240] font-bold translate-x-[2px]' 
-                    : 'text-slate-500 border-transparent hover:bg-slate-50/50 hover:text-slate-800 hover:translate-x-[2px]'}
-                `}
-              >
-                <span className="w-6 h-6 rounded bg-slate-50 border border-slate-200/60 flex items-center justify-center text-[12px] shadow-sm">
-                  {item.icon}
-                </span>
-                <span className="font-semibold">{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
-        </div>
-
-        <div className="px-5 pt-5 border-t border-slate-100 mt-auto">
-          <button 
-            onClick={logout}
-            className="w-full bg-white border border-slate-200 text-slate-500 cursor-pointer py-3 rounded-lg font-sans text-[11px] tracking-[1.5px] uppercase transition-all duration-300 hover:border-red-300 hover:bg-red-50 hover:text-red-600 flex items-center justify-center gap-2 group font-semibold shadow-sm"
-          >
-            <span className="text-[12px] group-hover:rotate-90 transition-transform duration-300">⏻</span> 
-            <span>LOGOUT SYSTEM</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-[230px] bg-sf/60 backdrop-blur-md border-r border-br/50 py-6 shrink-0 overflow-y-auto flex flex-col justify-between shadow-lg shadow-black/10 select-none">
-      <div>
-        <div className="flex flex-col gap-1 px-2 pt-2">
+    <div className="w-[220px] flex flex-col shrink-0 border-r select-none"
+      style={{ background: 'var(--bg-3)', borderColor: 'var(--border)', height: 'calc(100vh - 68px)' }}>
+
+      {/* Nav Items */}
+      <nav className="flex-1 overflow-y-auto p-3 pt-4">
+        <p className="text-[9px] font-bold uppercase tracking-[2.5px] px-3 mb-3"
+          style={{ color: 'var(--tx-mute)' }}>Navigation</p>
+        <div className="flex flex-col gap-0.5">
           {visibleItems.map(item => (
             <NavLink
               key={item.id}
               to={item.path}
-              className={({ isActive }) => `
-                flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer text-[13px] font-mn tracking-[0.5px] uppercase transition-all duration-300 ease-out border-l-2
-                ${isActive 
-                  ? 'bg-gradient-to-r from-am/15 via-am/5 to-transparent text-kh border-am shadow-md shadow-am/5 translate-x-[2px]' 
-                  : 'text-txd border-transparent hover:bg-sf/40 hover:text-khl hover:translate-x-[2px]'}
-              `}
+              end={item.path === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-[13px] font-semibold tracking-wide transition-all duration-200 border ${isActive
+                  ? 'border-[rgba(201,162,39,0.4)] text-[#c9a227]'
+                  : 'border-transparent hover:border-[rgba(201,162,39,0.15)] hover:text-[#c9a227]'
+                }`
+              }
+              style={({ isActive }) => ({
+                background: isActive ? 'rgba(201,162,39,0.1)' : 'transparent',
+                color: isActive ? 'var(--gold)' : 'var(--tx-dim)',
+              })}
             >
-              <span className="w-6 h-6 rounded bg-sf/80 border border-br/40 flex items-center justify-center text-[12px] shadow-sm">
-                {item.icon}
-              </span>
-              <span className="font-semibold">{item.label}</span>
+              <span className="text-[16px] leading-none w-5 text-center">{item.icon}</span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </div>
-      </div>
+      </nav>
 
-      <div className="px-5 pt-5 border-t border-br/40 mt-auto">
-        <button 
+      {/* Logout */}
+      <div className="p-3 border-t mt-auto" style={{ borderColor: 'var(--border)' }}>
+        <button
           onClick={logout}
-          className="w-full bg-sf border border-br/60 text-txd cursor-pointer py-3 rounded-lg font-mn text-[11px] tracking-[1.5px] uppercase transition-all duration-300 hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-400 hover:shadow-lg hover:shadow-rose-500/5 flex items-center justify-center gap-2 group font-semibold"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-[12px] font-bold uppercase tracking-widest border transition-all duration-200 cursor-pointer"
+          style={{ color: 'var(--tx-mute)', borderColor: 'var(--border)', background: 'transparent' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(244,63,94,0.5)'; e.currentTarget.style.color = '#f43f5e'; e.currentTarget.style.background = 'rgba(244,63,94,0.07)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--tx-mute)'; e.currentTarget.style.background = 'transparent'; }}
         >
-          <span className="text-[12px] group-hover:rotate-90 transition-transform duration-300">⏻</span> 
-          <span>LOGOUT SYSTEM</span>
+          <span>⏻</span>
+          <span>Sign Out</span>
         </button>
       </div>
     </div>

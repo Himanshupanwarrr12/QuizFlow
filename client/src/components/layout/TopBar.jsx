@@ -1,95 +1,61 @@
 import { useAuth } from '../../context/AuthContext';
 
+const ROLE_LABELS = {
+  super_admin:  'Super Admin',
+  exam_officer: 'Exam Officer',
+  candidate:    'Candidate',
+};
+
 export default function TopBar() {
   const { user } = useAuth();
-  const isCandidate = user?.role === 'candidate';
 
-  const ROLE_LABELS = {
-    super_admin: "Super Admin",
-    exam_officer: "Exam Officer",
-    candidate: "Candidate",
+  const roleBadgeStyle = {
+    super_admin:  { background: 'rgba(201,162,39,0.15)', color: '#c9a227', border: '1px solid rgba(201,162,39,0.4)' },
+    exam_officer: { background: 'rgba(34,197,94,0.1)',   color: '#22c55e',  border: '1px solid rgba(34,197,94,0.3)' },
+    candidate:    { background: 'rgba(99,102,241,0.1)',  color: '#818cf8',  border: '1px solid rgba(99,102,241,0.3)' },
   };
 
-  const getRoleBadgeClass = (role) => {
-    switch (role) {
-      case 'super_admin': 
-        return 'bg-gradient-to-r from-am to-amb text-oldd border border-am/20 shadow-sm shadow-am/5';
-      case 'exam_officer': 
-        return 'bg-cyan-950/40 text-cyan-400 border border-cyan-900/40';
-      case 'candidate': 
-        return 'bg-blue-50 text-blue-600 border-blue-200';
-      default: 
-        return 'bg-sf2 text-txd border border-br/40';
-    }
-  };
-
-  if (isCandidate) {
-    return (
-      <div className="bg-white border-b border-slate-200/80 px-6 h-[76px] flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-4 group">
-          {/* Glowing Shield Checkmark Icon */}
-          <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-md shadow-blue-500/10 transition-transform duration-300 group-hover:scale-105">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <div className="flex flex-col justify-center">
-            <div className="text-[13px] font-bold text-[#0a192f] tracking-[1.5px] uppercase leading-none select-none font-sans">
-              BEG & CENTRE ROORKEE · CANDIDATE PORTAL
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3.5 bg-slate-50 border border-slate-200/80 rounded-lg px-4 py-2 font-sans text-[12px] text-slate-600 shadow-sm">
-            <span className={`px-2.5 py-0.5 rounded text-[9.5px] font-bold tracking-[1px] uppercase border ${getRoleBadgeClass(user?.role)}`}>
-              {ROLE_LABELS[user?.role] || user?.role}
-            </span>
-            <span className="font-semibold text-slate-700">{user?.rank} {user?.name}</span>
-            {user?.unit && (
-              <span className="text-slate-400 text-[10.5px] font-medium border-l border-slate-200 pl-2.5">
-                {user.unit}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Admin and Officer Header
   return (
-    <div className="bg-sf/90 backdrop-blur-md border-b border-br/60 px-6 h-[76px] flex items-center justify-between sticky top-0 z-50 shadow-lg shadow-black/10">
-      <div className="flex items-center gap-4 group">
-        <div 
-          className="w-12 h-12 bg-gradient-to-br from-am to-amb flex items-center justify-center font-hd text-[16px] text-oldd font-extrabold shrink-0 transition-transform duration-300 group-hover:scale-105 cursor-pointer shadow-lg shadow-am/10" 
-          style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}
-        >
+    <header className="h-[68px] flex items-center justify-between px-6 shrink-0 border-b"
+      style={{ background: 'var(--bg-3)', borderColor: 'var(--border)', zIndex: 50 }}>
+
+      {/* Left — Branding */}
+      <div className="flex items-center gap-3.5">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center font-black text-[13px] flex-shrink-0"
+          style={{ background: 'var(--gold)', color: '#0a1a10' }}>
           BEG
         </div>
-        <div className="flex flex-col justify-center">
-          <div className="font-hd text-[28px] tracking-[4px] bg-gradient-to-r from-kh via-khl to-kh bg-clip-text text-transparent leading-none select-none font-bold">
+        <div>
+          <div className="text-[14px] font-black uppercase tracking-[2px] leading-none"
+            style={{ color: 'var(--gold)' }}>
             ONTEST
           </div>
-          <div className="font-mn text-[9px] text-txd mt-1 tracking-[1.5px] uppercase leading-none select-none opacity-80">
-            BEG & CENTRE ROORKEE · HQ UB AREA
+          <div className="text-[9px] font-semibold uppercase tracking-[1.5px] mt-0.5"
+            style={{ color: 'var(--tx-mute)' }}>
+            BEG & CENTRE ROORKEE
           </div>
         </div>
       </div>
 
+      {/* Right — User Info */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-3.5 bg-sf/40 border border-br/40 rounded-lg px-4 py-2 font-mn text-[12px] text-kh shadow-inner backdrop-blur-sm">
-          <span className={`px-2.5 py-0.5 rounded text-[9.5px] font-bold tracking-[1px] uppercase border ${getRoleBadgeClass(user?.role)}`}>
+        <div className="flex items-center gap-3 px-4 py-2 rounded-lg border"
+          style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)' }}>
+          <span className="text-[10px] font-bold uppercase tracking-[1px] px-2 py-0.5 rounded"
+            style={roleBadgeStyle[user?.role] || {}}>
             {ROLE_LABELS[user?.role] || user?.role}
           </span>
-          <span className="font-semibold text-khl">{user?.rank} {user?.name}</span>
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--tx)' }}>
+            {user?.rank} {user?.name}
+          </span>
           {user?.unit && (
-            <span className="text-txm text-[10.5px] font-medium border-l border-br/60 pl-2.5">
+            <span className="text-[11px] border-l pl-3 font-medium"
+              style={{ color: 'var(--tx-mute)', borderColor: 'var(--border)' }}>
               {user.unit}
             </span>
           )}
         </div>
       </div>
-    </div>
+    </header>
   );
 }

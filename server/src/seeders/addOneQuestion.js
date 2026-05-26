@@ -16,7 +16,7 @@ async function addOneQuestion() {
           optionA: "True",
           optionB: "False",
           correctOptions: "A",
-          category: "Technical",
+          category: "Must Know",
           subject: "Programming",
           topic: "NodeJS",
           difficulty: "Easy",

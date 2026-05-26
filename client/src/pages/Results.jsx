@@ -1,32 +1,40 @@
 import { useState, useEffect } from 'react';
-import { resultService, examService, superAdminService } from '../services/api';
+import { resultService, examService } from '../services/api';
 
 const AVAILABLE_UNITS = [
-  'HQ BEG', '21 Engr Regt', '22 Engr Regt', 'A Coy', 'B Coy', 'C Coy', 
-  'HQ Coy', 'Support Coy', 'Field Coy', 'Workshop', 'Signals Platoon'
+  'HQ BEG','21 Engr Regt','22 Engr Regt','A Coy','B Coy','C Coy',
+  'HQ Coy','Support Coy','Field Coy','Workshop','Signals Platoon'
 ];
 
-export default function Results() {
-  const [results, setResults] = useState([]);
-  const [exams, setExams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedAttempt, setSelectedAttempt] = useState(null);
-  const [loadingSheet, setLoadingSheet] = useState(false);
+const G   = 'var(--gold)';
+const Dim = 'var(--tx-mute)';
 
-  // Score Override modal state
-  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
-  const [overrideTarget, setOverrideTarget] = useState(null);
-  const [newQuizScore, setNewQuizScore] = useState('');
-  const [newPracticalMarks, setNewPracticalMarks] = useState('');
-  const [newVivaMarks, setNewVivaMarks] = useState('');
-  const [newSubjectiveMarks, setNewSubjectiveMarks] = useState('');
-  const [overrideReason, setOverrideReason] = useState('Administrative marks allocation');
-  const [overrideError, setOverrideError] = useState('');
-  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+export default function Results() {
+  const [results,         setResults]         = useState([]);
+  const [exams,           setExams]           = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [selectedAttempt, setSelectedAttempt] = useState(null);
+  const [loadingSheet,    setLoadingSheet]    = useState(false);
+
+  // Override modal state
+  const [overrideModalOpen,     setOverrideModalOpen]     = useState(false);
+  const [overrideTarget,        setOverrideTarget]        = useState(null);
+  const [newQuizScore,          setNewQuizScore]          = useState('');
+  const [newPracticalMarks,     setNewPracticalMarks]     = useState('');
+  const [newVivaMarks,          setNewVivaMarks]          = useState('');
+  const [newSubjectiveMarks,    setNewSubjectiveMarks]    = useState('');
+  const [overrideReason,        setOverrideReason]        = useState('Administrative marks allocation');
+  const [overrideError,         setOverrideError]         = useState('');
+  const [overrideSubmitting,    setOverrideSubmitting]    = useState(false);
+
+  // Filter states
+  const [searchQuery,  setSearchQuery]  = useState('');
+  const [selectedExam, setSelectedExam] = useState('');
+  const [selectedUnit, setSelectedUnit] = useState('');
 
   const handleOpenOverrideModal = (attempt) => {
     setOverrideTarget(attempt);
-    setNewQuizScore(attempt.quizScore !== undefined ? attempt.quizScore : (attempt.score - (attempt.practicalMarks || 0) - (attempt.vivaMarks || 0) - (attempt.subjectiveMarks || 0)));
+    setNewQuizScore(attempt.quizScore !== undefined ? attempt.quizScore : (attempt.score - (attempt.practicalMarks||0) - (attempt.vivaMarks||0) - (attempt.subjectiveMarks||0)));
     setNewPracticalMarks(attempt.practicalMarks !== undefined ? attempt.practicalMarks : 0);
     setNewVivaMarks(attempt.vivaMarks !== undefined ? attempt.vivaMarks : 0);
     setNewSubjectiveMarks(attempt.subjectiveMarks !== undefined ? attempt.subjectiveMarks : 0);
@@ -38,116 +46,56 @@ export default function Results() {
   const handleOverrideSubmit = async (e, inlineAttemptId = null) => {
     if (e) e.preventDefault();
     setOverrideError('');
-
-    const parsedQuiz = parseInt(newQuizScore);
-    const parsedPractical = parseInt(newPracticalMarks);
-    const parsedViva = parseInt(newVivaMarks);
+    const parsedQuiz       = parseInt(newQuizScore);
+    const parsedPractical  = parseInt(newPracticalMarks);
+    const parsedViva       = parseInt(newVivaMarks);
     const parsedSubjective = parseInt(newSubjectiveMarks);
-
     const targetId = inlineAttemptId || (overrideTarget ? overrideTarget.id : null);
-    const maxQuiz = selectedAttempt ? selectedAttempt.exam.totalMarks : (overrideTarget ? overrideTarget.quizMax : 10);
+    const maxQuiz  = selectedAttempt ? selectedAttempt.exam.totalMarks : (overrideTarget ? overrideTarget.quizMax : 10);
 
-    if (!targetId) {
-      setOverrideError('Invalid attempt target selected.');
-      return;
-    }
-
-    if (isNaN(parsedQuiz) || parsedQuiz < 0 || parsedQuiz > maxQuiz) {
-      setOverrideError(`Quiz score must be between 0 and ${maxQuiz}.`);
-      return;
-    }
-
-    if (isNaN(parsedPractical) || parsedPractical < 0 || parsedPractical > 20) {
-      setOverrideError('Practical marks must be between 0 and 20.');
-      return;
-    }
-
-    if (isNaN(parsedViva) || parsedViva < 0 || parsedViva > 20) {
-      setOverrideError('Viva marks must be between 0 and 20.');
-      return;
-    }
-
-    if (isNaN(parsedSubjective) || parsedSubjective < 0 || parsedSubjective > 20) {
-      setOverrideError('Subjective marks must be between 0 and 20.');
-      return;
-    }
-
-    if (!overrideReason.trim() || overrideReason.trim().length < 3) {
-      setOverrideError('Please provide a reason (at least 3 characters).');
-      return;
-    }
+    if (!targetId)                                          { setOverrideError('Invalid attempt target.'); return; }
+    if (isNaN(parsedQuiz)||parsedQuiz<0||parsedQuiz>maxQuiz) { setOverrideError(`Quiz score must be 0–${maxQuiz}.`); return; }
+    if (isNaN(parsedPractical)||parsedPractical<0||parsedPractical>20) { setOverrideError('Practical marks must be 0–20.'); return; }
+    if (isNaN(parsedViva)||parsedViva<0||parsedViva>20)     { setOverrideError('Viva marks must be 0–20.'); return; }
+    if (isNaN(parsedSubjective)||parsedSubjective<0||parsedSubjective>20) { setOverrideError('Subjective marks must be 0–20.'); return; }
+    if (!overrideReason.trim()||overrideReason.trim().length<3) { setOverrideError('Please provide a reason (≥3 chars).'); return; }
 
     try {
       setOverrideSubmitting(true);
       await resultService.overrideMarks(targetId, {
-        newMarks: parsedQuiz,
-        practicalMarks: parsedPractical,
-        vivaMarks: parsedViva,
-        subjectiveMarks: parsedSubjective,
+        newMarks: parsedQuiz, practicalMarks: parsedPractical,
+        vivaMarks: parsedViva, subjectiveMarks: parsedSubjective,
         reason: overrideReason.trim()
       });
-
-      // If we are currently viewing this attempt, live reload its details so the visual gauges update immediately!
       if (selectedAttempt && selectedAttempt.id === targetId) {
         const detailRes = await resultService.getResultDetail(targetId);
         setSelectedAttempt(detailRes.data?.attempt || null);
       }
-
-      setOverrideModalOpen(false);
-      setOverrideTarget(null);
+      setOverrideModalOpen(false); setOverrideTarget(null);
       fetchResultsData();
-    } catch (err) {
-      setOverrideError(err.response?.data?.message || 'Failed to update candidate marks.');
-    } finally {
-      setOverrideSubmitting(false);
-    }
+    } catch (err) { setOverrideError(err.response?.data?.message || 'Failed to update marks.'); }
+    finally { setOverrideSubmitting(false); }
   };
-  
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedExam, setSelectedExam] = useState('');
-  const [selectedUnit, setSelectedUnit] = useState('');
 
   const fetchResultsData = async () => {
     try {
       setLoading(true);
       const params = {};
       if (selectedExam) params.examId = selectedExam;
-      if (selectedUnit) params.unit = selectedUnit;
-      if (searchQuery) params.search = searchQuery;
-
-      const [resultsRes, examsRes] = await Promise.all([
-        resultService.getResults(params),
-        examService.getExams()
-      ]);
-
+      if (selectedUnit) params.unit   = selectedUnit;
+      if (searchQuery)  params.search = searchQuery;
+      const [resultsRes, examsRes] = await Promise.all([resultService.getResults(params), examService.getExams()]);
       const allResults = resultsRes.data?.results || [];
-      const fullyGradedResults = allResults.filter(
-        row => row.practicalMarks !== null && row.vivaMarks !== null
-      );
-      setResults(fullyGradedResults);
+      setResults(allResults.filter(r => r.practicalMarks !== null && r.vivaMarks !== null));
       setExams(examsRes.data?.exams || []);
-    } catch (err) {
-      console.error("Failed to load evaluations data:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error('Failed to load results:', err); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchResultsData();
-  }, [selectedExam, selectedUnit]); // Automatically fetch when dropdown filters change
+  useEffect(() => { fetchResultsData(); }, [selectedExam, selectedUnit]);
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    fetchResultsData();
-  };
-
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setSelectedExam('');
-    setSelectedUnit('');
-  };
+  const handleSearchSubmit = (e) => { e.preventDefault(); fetchResultsData(); };
+  const handleClearFilters = () => { setSearchQuery(''); setSelectedExam(''); setSelectedUnit(''); };
 
   const handleViewSheet = async (attemptId) => {
     try {
@@ -156,506 +104,315 @@ export default function Results() {
       const attempt = res.data?.attempt;
       setSelectedAttempt(attempt || null);
       if (attempt) {
-        // Initialize the editing states so the inline save/edit form works 100% perfectly!
         const quizMax = attempt.exam.totalMarks ?? 10;
-        setOverrideTarget({
-          id: attempt.id,
-          armyNumber: attempt.candidate.armyNumber,
-          rankName: `${attempt.candidate.rank} ${attempt.candidate.name}`,
-          examTitle: attempt.exam.title,
-          quizMax,
-          score: attempt.totalMarks,
-          totalMarks: attempt.exam.totalMarks
-        });
-        setNewQuizScore(attempt.totalMarks !== null && attempt.totalMarks !== undefined ? attempt.totalMarks : 0);
-        setNewPracticalMarks(attempt.practicalMarks !== null && attempt.practicalMarks !== undefined ? attempt.practicalMarks : 0);
-        setNewVivaMarks(attempt.vivaMarks !== null && attempt.vivaMarks !== undefined ? attempt.vivaMarks : 0);
-        setNewSubjectiveMarks(attempt.subjectiveMarks !== null && attempt.subjectiveMarks !== undefined ? attempt.subjectiveMarks : 0);
+        setOverrideTarget({ id: attempt.id, armyNumber: attempt.candidate.armyNumber, rankName: `${attempt.candidate.rank} ${attempt.candidate.name}`, examTitle: attempt.exam.title, quizMax, score: attempt.totalMarks, totalMarks: attempt.exam.totalMarks });
+        setNewQuizScore(attempt.totalMarks ?? 0);
+        setNewPracticalMarks(attempt.practicalMarks ?? 0);
+        setNewVivaMarks(attempt.vivaMarks ?? 0);
+        setNewSubjectiveMarks(attempt.subjectiveMarks ?? 0);
         setOverrideReason(attempt.reason || 'Administrative marks allocation');
         setOverrideError('');
       }
-    } catch (err) {
-      alert("Failed to load evaluation response sheet: " + (err.response?.data?.message || err.message));
-    } finally {
-      setLoadingSheet(false);
-    }
+    } catch (err) { alert('Failed to load evaluation sheet: ' + (err.response?.data?.message || err.message)); }
+    finally { setLoadingSheet(false); }
   };
 
-  // Compute summary stats from results
   const totalEvaluated = results.length;
-  const passedCount = results.filter(r => r.isPassed).length;
-  const passRate = totalEvaluated > 0 ? Math.round((passedCount / totalEvaluated) * 100) : 0;
-  const avgScore = totalEvaluated > 0 ? Math.round(results.reduce((sum, r) => sum + r.percentage, 0) / totalEvaluated) : 0;
-  const highestScore = totalEvaluated > 0 ? Math.max(...results.map(r => r.percentage)) : 0;
+  const passedCount    = results.filter(r => r.isPassed).length;
+  const passRate       = totalEvaluated > 0 ? Math.round((passedCount / totalEvaluated) * 100) : 0;
+  const avgScore       = totalEvaluated > 0 ? Math.round(results.reduce((s, r) => s + r.percentage, 0) / totalEvaluated) : 0;
+  const highestScore   = totalEvaluated > 0 ? Math.max(...results.map(r => r.percentage)) : 0;
+
+  const statCards = [
+    { label: 'Total Evaluated',  value: totalEvaluated, sub: 'Candidates completed',     color: 'var(--gold)' },
+    { label: 'Pass Rate',        value: `${passRate}%`, sub: `${passedCount} of ${totalEvaluated} passed`, color: '#22c55e' },
+    { label: 'Average Score',    value: `${avgScore}%`, sub: 'Class aggregate average',  color: '#818cf8' },
+    { label: 'Highest Score',    value: `${highestScore}%`, sub: 'Top performer score',  color: '#38bdf8' },
+  ];
 
   return (
-    <div>
+    <div className="space-y-5 animate-fade-in">
+
       {/* Header */}
-      <div className="mb-6">
-        <div className="font-hd text-[34px] tracking-[3px] text-kh leading-none">RESULTS & EVALUATIONS</div>
-        <div className="font-mn text-[10px] text-txd mt-1 tracking-[1px] uppercase">
-          PERFORMANCE ANALYSIS · INDIVIDUAL SHEETS · AUDITING
-        </div>
+      <div>
+        <div className="page-title">Results &amp; Evaluations</div>
+        <div className="page-subtitle">Performance Analysis · Individual Sheets · Auditing</div>
       </div>
 
-      {/* Aggregate Stats Dashboard */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-sf border border-br rounded-md p-5 relative overflow-hidden">
-          <div className="font-mn text-[10px] text-txm uppercase tracking-[1.5px]">Total Evaluated</div>
-          <div className="font-hd text-[36px] text-kh mt-1 leading-none">{totalEvaluated}</div>
-          <div className="font-mn text-[9px] text-txd mt-2">CANDIDATES COMPLETED</div>
-          <div className="absolute right-4 bottom-2 text-am/10 font-hd text-[48px]">★</div>
-        </div>
-
-        <div className="bg-sf border border-br rounded-md p-5 relative overflow-hidden">
-          <div className="font-mn text-[10px] text-txm uppercase tracking-[1.5px]">Overall Pass Rate</div>
-          <div className="font-hd text-[36px] text-green-500 mt-1 leading-none">{passRate}%</div>
-          <div className="font-mn text-[9px] text-txd mt-2">{passedCount} OUT OF {totalEvaluated} PASSED</div>
-          <div className="absolute right-4 bottom-2 text-green-500/10 font-hd text-[48px]">✔</div>
-        </div>
-
-        <div className="bg-sf border border-br rounded-md p-5 relative overflow-hidden">
-          <div className="font-mn text-[10px] text-txm uppercase tracking-[1.5px]">Average Score</div>
-          <div className="font-hd text-[36px] text-am mt-1 leading-none">{avgScore}%</div>
-          <div className="font-mn text-[9px] text-txd mt-2">CLASS AGGREGATE AVERAGE</div>
-          <div className="absolute right-4 bottom-2 text-am/10 font-hd text-[48px]">🗲</div>
-        </div>
-
-        <div className="bg-sf border border-br rounded-md p-5 relative overflow-hidden">
-          <div className="font-mn text-[10px] text-txm uppercase tracking-[1.5px]">Highest Score</div>
-          <div className="font-hd text-[36px] text-[#3498db] mt-1 leading-none">{highestScore}%</div>
-          <div className="font-mn text-[9px] text-txd mt-2">TOP PERFORMER SCORE</div>
-          <div className="absolute right-4 bottom-2 text-[#3498db]/10 font-hd text-[48px]">🏆</div>
-        </div>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map((s, i) => (
+          <div key={i} className="card border-t-2 relative overflow-hidden" style={{ borderTopColor: s.color }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: Dim }}>{s.label}</div>
+            <div className="text-[36px] font-black leading-none mb-1" style={{ color: s.color }}>{s.value}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: Dim }}>{s.sub}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Filters Form */}
-      <form onSubmit={handleSearchSubmit} className="bg-sf border border-br rounded-md p-4 mb-6 space-y-3 lg:space-y-0 lg:flex lg:items-center lg:space-x-4">
-        <div className="flex-1">
-          <input 
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search candidate name or army number..."
-            className="form-input bg-sf text-[12px] h-[38px] w-full"
-          />
-        </div>
-
-        <div className="w-full lg:w-[220px]">
-          <select 
-            value={selectedExam}
-            onChange={(e) => setSelectedExam(e.target.value)}
-            className="form-input bg-sf text-white text-[12px] h-[38px] w-full"
-          >
-            <option value="">All Examinations</option>
-            {exams.map(ex => (
-              <option key={ex.id} value={ex.id}>{ex.title}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="w-full lg:w-[180px]">
-          <select 
-            value={selectedUnit}
-            onChange={(e) => setSelectedUnit(e.target.value)}
-            className="form-input bg-sf text-white text-[12px] h-[38px] w-full"
-          >
-            <option value="">All Units</option>
-            {AVAILABLE_UNITS.map(ut => (
-              <option key={ut} value={ut}>{ut}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex space-x-2">
-          <button 
-            type="submit" 
-            className="btn bg-am hover:bg-am/90 text-oldd transition-colors h-[38px] px-5 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center justify-center"
-          >
-            Search
-          </button>
-          
+      {/* Filters */}
+      <form onSubmit={handleSearchSubmit} className="card !py-3 !px-4 flex flex-wrap items-center gap-3">
+        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search candidate name or army number..." className="form-input flex-1 min-w-[200px]" />
+        <select value={selectedExam} onChange={e => setSelectedExam(e.target.value)} className="form-input w-[200px]">
+          <option value="">All Examinations</option>
+          {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title}</option>)}
+        </select>
+        <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} className="form-input w-[160px]">
+          <option value="">All Units</option>
+          {AVAILABLE_UNITS.map(ut => <option key={ut} value={ut}>{ut}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <button type="submit" className="btn btn-primary px-5 py-2 uppercase tracking-widest text-[11px]">Search</button>
           {(searchQuery || selectedExam || selectedUnit) && (
-            <button 
-              type="button"
-              onClick={handleClearFilters}
-              className="btn bg-neutral-800 hover:bg-neutral-700 text-kh transition-colors h-[38px] px-4 rounded font-mn text-[11px] uppercase border border-br"
-            >
-              Clear
-            </button>
+            <button type="button" onClick={handleClearFilters} className="btn btn-secondary px-4 py-2 uppercase tracking-widest text-[11px]">Clear</button>
           )}
         </div>
       </form>
 
-      {/* Loading state */}
-      {loading && <div className="text-center py-12 font-mn text-txm">Fetching candidate result lists...</div>}
+      {loading && <div className="text-center py-12 text-[13px]" style={{ color: Dim }}>Fetching results...</div>}
 
-      {/* Main Results Table */}
+      {/* Results table */}
       {!loading && (
-        <div className="bg-sf border border-br rounded-md overflow-x-auto">
+        <div className="card !p-0 overflow-x-auto">
           {results.length === 0 ? (
-            <div className="p-8 text-center font-mn text-txm">
-              No matching evaluation results found.
-            </div>
+            <div className="p-10 text-center text-[13px]" style={{ color: Dim }}>No matching evaluation results found.</div>
           ) : (
-            <table className="w-full border-collapse text-left font-mn">
+            <table className="data-table">
               <thead>
-                <tr className="border-b border-br bg-sf2 text-kh text-[13px] tracking-[1.5px] uppercase">
-                  <th className="p-5">Army No · Rank · Name</th>
-                  <th className="p-5">Assigned Unit</th>
-                  <th className="p-5">Trade Specialist</th>
-                  <th className="p-5">Examination Title</th>
-                  <th className="p-5">Duration</th>
-                  <th className="p-5 text-center">Score Ratio</th>
-                  <th className="p-5 text-center">Percentage</th>
-                  <th className="p-5 text-center">Status</th>
-                  <th className="p-5 text-right">Composite Grading</th>
+                <tr>
+                  <th>Army No · Rank · Name</th>
+                  <th>Unit</th>
+                  <th>Trade</th>
+                  <th>Examination</th>
+                  <th className="text-center">Score</th>
+                  <th className="text-center">%</th>
+                  <th className="text-center">Status</th>
+                  <th className="text-right">Sheet</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-br text-[15px] text-txm">
-                {results.map((row) => {
-                  const hasNoManualMarks = row.practicalMarks === 0 && row.vivaMarks === 0 && row.subjectiveMarks === 0;
-
-                  return (
-                    <tr key={row.id} className="hover:bg-am/5 transition-colors border-b border-br/45">
-                      <td className="p-5 font-semibold text-kh whitespace-nowrap">
-                        {row.armyNumber} <span className="font-normal text-txm">· {row.rankName}</span>
-                      </td>
-                      <td className="p-5 whitespace-nowrap font-medium text-tx">{row.unit}</td>
-                      <td className="p-5 whitespace-nowrap font-medium text-tx">{row.trade}</td>
-                      <td className="p-5">
-                        <div className="font-semibold text-kh truncate max-w-[240px] text-[15.5px]">{row.examTitle}</div>
-                        <div className="text-[10px] text-txd mt-0.5 tracking-[0.5px] uppercase font-bold">{row.examCode}</div>
-                      </td>
-                      <td className="p-5 whitespace-nowrap">{row.durationMinutes} min</td>
-                      <td className="p-5 text-center whitespace-nowrap">
-                        <div className="font-bold text-kh text-[16px]">{row.score} / {row.totalMarks}</div>
-                        <div className="font-mn text-[10px] text-txd tracking-[0.5px] mt-1 uppercase">
-                          Subj: {row.quizScore} | Prac: {row.practicalMarks} | Viva: {row.vivaMarks}
-                        </div>
-                      </td>
-                      <td className="p-5 text-center font-bold text-[16.5px]">
-                        <span className={row.isPassed ? "text-green-400" : "text-rose-400"}>{row.percentage}%</span>
-                      </td>
-                      <td className="p-5 text-center">
-                        <span className={`px-3 py-1 rounded font-mn text-[10.5px] uppercase tracking-[1.5px] inline-block font-bold ${
-                          row.isPassed 
-                            ? 'bg-green-950 text-green-400 border border-green-800' 
-                            : 'bg-rose-950 text-rose-400 border border-rose-800'
-                        }`}>
-                          {row.isPassed ? 'PASSED' : 'FAILED'}
-                        </span>
-                      </td>
-                      <td className="p-5 text-right whitespace-nowrap">
-                        <button 
-                          onClick={() => handleViewSheet(row.id)}
-                          className="btn bg-am/15 border border-am/35 hover:bg-am/30 text-am transition-all py-2.5 px-5 rounded font-mn text-[12.5px] uppercase tracking-[1px] font-bold"
-                        >
-                          🔍 View Sheet
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+              <tbody>
+                {results.map(row => (
+                  <tr key={row.id}>
+                    <td>
+                      <span className="font-semibold" style={{ color: G }}>{row.armyNumber}</span>
+                      <span className="text-[11px] ml-1.5" style={{ color: Dim }}>· {row.rankName}</span>
+                    </td>
+                    <td className="font-medium" style={{ color: 'var(--tx)' }}>{row.unit}</td>
+                    <td style={{ color: Dim }}>{row.trade}</td>
+                    <td>
+                      <div className="font-semibold text-[13px] max-w-[200px] truncate" style={{ color: G }}>{row.examTitle}</div>
+                      <div className="font-mono text-[10px] mt-0.5" style={{ color: Dim }}>{row.examCode}</div>
+                    </td>
+                    <td className="text-center">
+                      <div className="font-bold text-[15px]" style={{ color: 'var(--tx)' }}>{row.score} / {row.totalMarks}</div>
+                      <div className="text-[10px] mt-0.5 uppercase tracking-wide" style={{ color: Dim }}>
+                        S:{row.quizScore} P:{row.practicalMarks} V:{row.vivaMarks}
+                      </div>
+                    </td>
+                    <td className="text-center font-black text-[16px]">
+                      <span style={{ color: row.isPassed ? '#22c55e' : '#f43f5e' }}>{row.percentage}%</span>
+                    </td>
+                    <td className="text-center">
+                      <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        row.isPassed
+                          ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/40'
+                          : 'bg-rose-900/40 text-rose-400 border border-rose-700/40'
+                      }`}>{row.isPassed ? 'Passed' : 'Failed'}</span>
+                    </td>
+                    <td className="text-right">
+                      <button onClick={() => handleViewSheet(row.id)}
+                        className="btn text-[11px] uppercase tracking-wider px-4 py-2"
+                        style={{ background: 'rgba(201,162,39,0.1)', color: G, border: '1px solid rgba(201,162,39,0.3)' }}
+                        onMouseEnter={e => e.currentTarget.style.background='rgba(201,162,39,0.2)'}
+                        onMouseLeave={e => e.currentTarget.style.background='rgba(201,162,39,0.1)'}>
+                        🔍 View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
       )}
 
-      {/* COMPOSITE TACTICAL SCORECARD VIEW-ONLY LEDGER */}
+      {/* Detailed Scorecard Modal */}
       {selectedAttempt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
-          <div className="bg-sf border-2 border-am/40 rounded-lg w-full max-w-4xl max-h-[94vh] overflow-y-auto shadow-2xl relative animate-fade-in font-mn">
-            
-            {/* Top Header Banner */}
-            <div className="bg-sf2 border-b border-br p-6 flex justify-between items-center relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in"
+          style={{ background: 'rgba(10,26,16,0.9)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-2xl border"
+            style={{ background: 'var(--bg-3)', borderColor: 'rgba(201,162,39,0.4)' }}>
+
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
               <div>
-                <span className="px-3 py-1 rounded font-mn text-[10.5px] uppercase tracking-[1.5px] bg-am/15 text-kh border border-am/25 font-bold">
-                  🛡️ candidate transcript ledger
+                <span className="text-[10px] font-black uppercase tracking-[3px] px-3 py-1 rounded"
+                  style={{ background: 'rgba(201,162,39,0.1)', color: G, border: '1px solid rgba(201,162,39,0.25)' }}>
+                  🛡️ Candidate Transcript Ledger
                 </span>
-                <h2 className="font-hd text-[30px] text-kh uppercase tracking-[1.5px] mt-2.5 leading-none">
+                <h2 className="text-[24px] font-black uppercase tracking-wide mt-2" style={{ color: G }}>
                   Candidate Evaluation Scorecard
                 </h2>
               </div>
-              <button 
-                onClick={() => setSelectedAttempt(null)}
-                className="text-txd hover:text-kh text-3xl font-bold transition-colors p-2"
-              >
-                ✕
-              </button>
+              <button onClick={() => setSelectedAttempt(null)}
+                className="text-[24px] font-bold cursor-pointer transition-colors p-2"
+                style={{ color: Dim }}
+                onMouseEnter={e => e.currentTarget.style.color='var(--tx)'}
+                onMouseLeave={e => e.currentTarget.style.color=Dim}>✕</button>
             </div>
 
-            {/* Main Content Layout */}
             <div className="p-6 space-y-6">
-              
-              {/* Scorecard visualization container */}
-              <div className="space-y-6">
-                
-                {/* Candidate Information Card */}
-                <div className="bg-sf2 border border-br rounded-md p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-txm">
-                  <div>
-                    <span className="text-txd block uppercase text-[10px] tracking-[0.5px]">Army Number</span>
-                    <span className="text-kh font-bold text-[15px] uppercase">{selectedAttempt.candidate.armyNumber}</span>
+
+              {/* Candidate info */}
+              <div className="card grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  ['Army Number', selectedAttempt.candidate.armyNumber],
+                  ['Rank & Name', `${selectedAttempt.candidate.rank} ${selectedAttempt.candidate.name}`],
+                  ['Assigned Unit', selectedAttempt.candidate.unit],
+                  ['Trade Specialist', selectedAttempt.candidate.trade],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <span className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: Dim }}>{k}</span>
+                    <span className="font-bold text-[14px] uppercase" style={{ color: G }}>{v}</span>
                   </div>
-                  <div>
-                    <span className="text-txd block uppercase text-[10px] tracking-[0.5px]">Rank & Name</span>
-                    <span className="text-kh font-bold text-[15px] uppercase">{selectedAttempt.candidate.rank} {selectedAttempt.candidate.name}</span>
-                  </div>
-                  <div>
-                    <span className="text-txd block uppercase text-[10px] tracking-[0.5px]">Assigned Unit</span>
-                    <span className="text-kh font-bold text-[15px] uppercase">{selectedAttempt.candidate.unit}</span>
-                  </div>
-                  <div>
-                    <span className="text-txd block uppercase text-[10px] tracking-[0.5px]">Trade Specialist</span>
-                    <span className="text-kh font-bold text-[15px] uppercase">{selectedAttempt.candidate.trade}</span>
-                  </div>
-                </div>
-
-                {/* Big Composite Marks Meter */}
-                {(() => {
-                  const quizScore = selectedAttempt.totalMarks ?? 0;
-                  const quizMax = selectedAttempt.exam.totalMarks ?? 10; // Dynamic maximum marks based on online quiz questions
-                  const practicalScore = selectedAttempt.practicalMarks ?? 0;
-                  const vivaScore = selectedAttempt.vivaMarks ?? 0;
-
-                  const totalScore = quizScore + practicalScore + vivaScore;
-                  const maxMarks = quizMax + 40; // Dynamic QuizMax + 20 Practical + 20 Viva
-                  const percentage = Math.round((totalScore / maxMarks) * 100);
-                  const passingScore = selectedAttempt.exam.passingMarks 
-                    ? (selectedAttempt.exam.passingMarks + 20)
-                    : Math.ceil(maxMarks * 0.5);
-                  const isPassed = totalScore >= passingScore;
-
-                  return (
-                    <div className="bg-sf2 border border-br rounded-md p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                      {/* Big circle/badge percentage */}
-                      <div className="text-center md:border-r md:border-br md:pr-10">
-                        <div className="font-mn text-[11px] text-txd uppercase tracking-[2px] mb-2 font-bold">composite result</div>
-                        <div className="inline-flex flex-col items-center justify-center p-6 rounded-full border-4 border-br bg-sf" style={{ borderColor: isPassed ? '#10b981' : '#f43f5e' }}>
-                          <span className="font-hd text-[54px] leading-none" style={{ color: isPassed ? '#10b981' : '#f43f5e' }}>
-                            {percentage}%
-                          </span>
-                        </div>
-                        <span className={`mt-3 px-3 py-1 rounded font-mn text-[11px] uppercase tracking-[1.5px] inline-block font-bold ${
-                          isPassed ? 'bg-green-950 text-green-400 border border-green-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                        }`}>
-                          {isPassed ? '✔ PASSED' : '✘ FAILED'}
-                        </span>
-                      </div>
-
-                      {/* Weightage breakdowns */}
-                      <div className="flex-1 w-full space-y-4 font-mn">
-                        <div>
-                          <div className="flex justify-between text-[13px] mb-1 font-bold">
-                            <span className="text-kh">1. SUBJECTIVE EVALUATION (WRITTEN):</span>
-                            <span className="text-kh">{quizScore} / {quizMax} M</span>
-                          </div>
-                          <div className="w-full bg-sf border border-br h-2.5 rounded-full overflow-hidden">
-                            <div className="bg-[#7c3aed] h-full transition-all duration-300" style={{ width: `${(quizScore / quizMax) * 100}%` }}></div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="flex justify-between text-[13px] mb-1 font-bold">
-                            <span className="text-am">2. PRACTICAL EVALUATION:</span>
-                            <span className="text-am">{practicalScore} / 20 M</span>
-                          </div>
-                          <div className="w-full bg-sf border border-br h-2.5 rounded-full overflow-hidden">
-                            <div className="bg-am h-full transition-all duration-300" style={{ width: `${(practicalScore / 20) * 100}%` }}></div>
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="flex justify-between text-[13px] mb-1 font-bold">
-                            <span className="text-[#3498db]">3. VIVA VOCE:</span>
-                            <span className="text-[#3498db]">{vivaScore} / 20 M</span>
-                          </div>
-                          <div className="w-full bg-sf border border-br h-2.5 rounded-full overflow-hidden">
-                            <div className="bg-[#3498db] h-full transition-all duration-300" style={{ width: `${(vivaScore / 20) * 100}%` }}></div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between border-t border-br pt-3 text-[14px] font-bold text-kh uppercase">
-                          <span>Total Composite Marks:</span>
-                          <span>{totalScore} / {maxMarks} Marks</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Response Breakdown list */}
-                <div className="bg-sf2 border border-br rounded-md p-4 max-h-[500px] overflow-y-auto">
-                  <div className="font-mn text-[13px] text-kh uppercase tracking-[1px] border-b border-br pb-2 mb-3 font-bold">
-                    Detailed Response Sheet Analysis
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {selectedAttempt.responses.map((res, index) => {
-                      const isCorrect = res.marksAwarded > 0;
-                      const q = res.question;
-                      const candidateAns = res.selectedOption;
-                      const correctAns = q.correctOptions;
-
-                      return (
-                        <div key={res.id} className={`p-4 rounded border text-[13px] ${
-                          isCorrect ? 'bg-green-950/5 border-green-900/30' : 'bg-rose-950/5 border-rose-900/30'
-                        }`}>
-                          {/* Header */}
-                          <div className="flex justify-between items-start gap-4 mb-3">
-                            <div>
-                              <span className="font-bold text-kh mr-2">Q{index + 1}.</span>
-                              <span className="text-white font-medium text-[13.5px] leading-relaxed">{q.text}</span>
-                            </div>
-                            <span className={`shrink-0 font-mn font-bold px-2 py-0.5 rounded text-[10px] uppercase border ${
-                              isCorrect 
-                                ? 'text-green-400 bg-green-950/30 border-green-800' 
-                                : 'text-rose-400 bg-rose-950/30 border-rose-800'
-                            }`}>
-                              {isCorrect ? '✔ CORRECT' : '✘ INCORRECT'}
-                            </span>
-                          </div>
-
-                          {/* Options Grid */}
-                          {(q.optionA || q.optionB || q.optionC || q.optionD) ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 pl-6">
-                              {q.optionA && (
-                                <div className={`p-2 rounded border text-[12px] flex items-center justify-between transition-all ${
-                                  candidateAns === 'A'
-                                    ? isCorrect 
-                                      ? 'bg-green-950/45 border-green-500 text-green-300 font-bold' 
-                                      : 'bg-rose-950/45 border-rose-500 text-rose-300 font-bold'
-                                    : correctAns === 'A'
-                                      ? 'bg-green-950/20 border-green-800/60 text-green-400'
-                                      : 'bg-sf border-br text-txm'
-                                }`}>
-                                  <span>A. {q.optionA}</span>
-                                  {candidateAns === 'A' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-black/45">
-                                      {isCorrect ? '✔ Your Choice' : '✘ Your Choice'}
-                                    </span>
-                                  )}
-                                  {correctAns === 'A' && candidateAns !== 'A' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-green-900/60 text-green-400">
-                                      ✔ Correct
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-
-                              {q.optionB && (
-                                <div className={`p-2 rounded border text-[12px] flex items-center justify-between transition-all ${
-                                  candidateAns === 'B'
-                                    ? isCorrect 
-                                      ? 'bg-green-950/45 border-green-500 text-green-300 font-bold' 
-                                      : 'bg-rose-950/45 border-rose-500 text-rose-300 font-bold'
-                                    : correctAns === 'B'
-                                      ? 'bg-green-950/20 border-green-800/60 text-green-400'
-                                      : 'bg-sf border-br text-txm'
-                                }`}>
-                                  <span>B. {q.optionB}</span>
-                                  {candidateAns === 'B' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-black/45">
-                                      {isCorrect ? '✔ Your Choice' : '✘ Your Choice'}
-                                    </span>
-                                  )}
-                                  {correctAns === 'B' && candidateAns !== 'B' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-green-900/60 text-green-400">
-                                      ✔ Correct
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-
-                              {q.optionC && (
-                                <div className={`p-2 rounded border text-[12px] flex items-center justify-between transition-all ${
-                                  candidateAns === 'C'
-                                    ? isCorrect 
-                                      ? 'bg-green-950/45 border-green-500 text-green-300 font-bold' 
-                                      : 'bg-rose-950/45 border-rose-500 text-rose-300 font-bold'
-                                    : correctAns === 'C'
-                                      ? 'bg-green-950/20 border-green-800/60 text-green-400'
-                                      : 'bg-sf border-br text-txm'
-                                }`}>
-                                  <span>C. {q.optionC}</span>
-                                  {candidateAns === 'C' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-black/45">
-                                      {isCorrect ? '✔ Your Choice' : '✘ Your Choice'}
-                                    </span>
-                                  )}
-                                  {correctAns === 'C' && candidateAns !== 'C' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-green-900/60 text-green-400">
-                                      ✔ Correct
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-
-                              {q.optionD && (
-                                <div className={`p-2 rounded border text-[12px] flex items-center justify-between transition-all ${
-                                  candidateAns === 'D'
-                                    ? isCorrect 
-                                      ? 'bg-green-950/45 border-green-500 text-green-300 font-bold' 
-                                      : 'bg-rose-950/45 border-rose-500 text-rose-300 font-bold'
-                                    : correctAns === 'D'
-                                      ? 'bg-green-950/20 border-green-800/60 text-green-400'
-                                      : 'bg-sf border-br text-txm'
-                                }`}>
-                                  <span>D. {q.optionD}</span>
-                                  {candidateAns === 'D' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-black/45">
-                                      {isCorrect ? '✔ Your Choice' : '✘ Your Choice'}
-                                    </span>
-                                  )}
-                                  {correctAns === 'D' && candidateAns !== 'D' && (
-                                    <span className="text-[9.5px] uppercase font-bold tracking-[0.5px] px-1.5 py-0.5 rounded bg-green-900/60 text-green-400">
-                                      ✔ Correct
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            /* Fallback for true/false or written inputs */
-                            <div className="mt-2 pl-6 space-y-1.5 text-[12px] font-mono">
-                              <div>
-                                <span className="text-txd mr-2 uppercase font-bold">Selected Answer:</span>
-                                <span className={`font-bold ${isCorrect ? 'text-green-400' : 'text-rose-400'}`}>
-                                  {candidateAns || "[No Answer Given]"}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-txd mr-2 uppercase font-bold">Correct Solution:</span>
-                                <span className="text-green-400 font-bold">{correctAns}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
+                ))}
               </div>
 
+              {/* Score meter */}
+              {(() => {
+                const quizScore     = selectedAttempt.totalMarks ?? 0;
+                const quizMax       = selectedAttempt.exam.totalMarks ?? 10;
+                const practicalScore= selectedAttempt.practicalMarks ?? 0;
+                const vivaScore     = selectedAttempt.vivaMarks ?? 0;
+                const totalScore    = quizScore + practicalScore + vivaScore;
+                const maxMarks      = quizMax + 40;
+                const percentage    = Math.round((totalScore / maxMarks) * 100);
+                const passingScore  = selectedAttempt.exam.passingMarks
+                  ? (selectedAttempt.exam.passingMarks + 20)
+                  : Math.ceil(maxMarks * 0.5);
+                const isPassed = totalScore >= passingScore;
+
+                return (
+                  <div className="card flex flex-col md:flex-row items-center gap-8">
+                    {/* Circle */}
+                    <div className="text-center flex-shrink-0">
+                      <div className="text-[10px] font-black uppercase tracking-[3px] mb-3" style={{ color: Dim }}>Composite Result</div>
+                      <div className="w-32 h-32 rounded-full border-4 flex flex-col items-center justify-center"
+                        style={{ borderColor: isPassed ? '#22c55e' : '#f43f5e', background: 'rgba(0,0,0,0.3)' }}>
+                        <span className="text-[42px] font-black leading-none" style={{ color: isPassed ? '#22c55e' : '#f43f5e' }}>{percentage}%</span>
+                      </div>
+                      <span className={`mt-3 inline-block px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
+                        isPassed ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/40'
+                                 : 'bg-rose-900/40 text-rose-400 border border-rose-700/40'
+                      }`}>{isPassed ? '✔ Passed' : '✘ Failed'}</span>
+                    </div>
+
+                    {/* Bars */}
+                    <div className="flex-1 w-full space-y-4">
+                      {[
+                        { label: '1. Subjective (Written)', score: quizScore, max: quizMax, color: '#818cf8' },
+                        { label: '2. Practical Evaluation', score: practicalScore, max: 20, color: G },
+                        { label: '3. Viva Voce', score: vivaScore, max: 20, color: '#38bdf8' },
+                      ].map(({ label, score, max, color }) => (
+                        <div key={label}>
+                          <div className="flex justify-between text-[12px] font-bold mb-1.5">
+                            <span style={{ color }}>{label}</span>
+                            <span style={{ color }}>{score} / {max} M</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(score/max)*100}%`, background: color }} />
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-3 border-t text-[13px] font-black uppercase" style={{ borderColor: 'var(--border)', color: G }}>
+                        <span>Total Composite Marks</span>
+                        <span>{totalScore} / {maxMarks} Marks</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Response breakdown */}
+              <div className="card !p-4 max-h-[450px] overflow-y-auto">
+                <div className="text-[12px] font-black uppercase tracking-widest mb-4 pb-3 border-b" style={{ color: G, borderColor: 'var(--border)' }}>
+                  Detailed Response Sheet Analysis
+                </div>
+                <div className="space-y-4">
+                  {selectedAttempt.responses.map((res, index) => {
+                    const isCorrect   = res.marksAwarded > 0;
+                    const q           = res.question;
+                    const candidateAns= res.selectedOption;
+                    const correctAns  = q.correctOptions;
+
+                    return (
+                      <div key={res.id} className="p-4 rounded-lg border text-[13px]"
+                        style={{ background: isCorrect ? 'rgba(34,197,94,0.04)' : 'rgba(244,63,94,0.04)', borderColor: isCorrect ? 'rgba(34,197,94,0.2)' : 'rgba(244,63,94,0.2)' }}>
+                        <div className="flex justify-between items-start gap-4 mb-3">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                              <span className="font-bold mr-2 text-[14px]" style={{ color: G }}>Q{index+1}.</span>
+                              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider flex-shrink-0"
+                                style={{
+                                  background: q.category === 'Must Know' ? 'rgba(244,63,94,0.1)' : q.category === 'Could Know' ? 'rgba(56,189,248,0.1)' : 'rgba(245,158,11,0.1)',
+                                  color: q.category === 'Must Know' ? '#f43f5e' : q.category === 'Could Know' ? '#38bdf8' : '#f59e0b',
+                                  border: `1px solid ${q.category === 'Must Know' ? '#f43f5e30' : q.category === 'Could Know' ? '#38bdf830' : '#f59e0b30'}`
+                                }}>
+                                {q.category || 'Must Know'}
+                              </span>
+                            </div>
+                            <span className="font-medium leading-relaxed" style={{ color: 'var(--tx)' }}>{q.text}</span>
+                          </div>
+                          <span className={`flex-shrink-0 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${
+                            isCorrect ? 'text-emerald-400 bg-emerald-900/30 border-emerald-700/40'
+                                      : 'text-rose-400 bg-rose-900/30 border-rose-700/40'
+                          }`}>{isCorrect ? '✔ Correct' : '✘ Wrong'}</span>
+                        </div>
+
+                        {(q.optionA || q.optionB || q.optionC || q.optionD) ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-5 mt-2">
+                            {['A','B','C','D'].map(opt => {
+                              const optText = q[`option${opt}`];
+                              if (!optText) return null;
+                              const isCandidateChoice = candidateAns === opt;
+                              const isCorrectChoice   = correctAns === opt;
+                              let style = { background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: Dim };
+                              if (isCandidateChoice && isCorrect)   style = { background: 'rgba(34,197,94,0.15)',  borderColor: '#22c55e', color: '#22c55e' };
+                              if (isCandidateChoice && !isCorrect)  style = { background: 'rgba(244,63,94,0.15)',  borderColor: '#f43f5e', color: '#f43f5e' };
+                              if (!isCandidateChoice && isCorrectChoice) style = { background: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.4)', color: '#22c55e' };
+                              return (
+                                <div key={opt} className="p-2.5 rounded border flex items-center justify-between text-[12px]"
+                                  style={{ ...style, borderWidth: '1px' }}>
+                                  <span>{opt}. {optText}</span>
+                                  {isCandidateChoice && <span className="text-[9px] font-black uppercase tracking-wide">{isCorrect ? '✔ Your answer' : '✘ Your answer'}</span>}
+                                  {!isCandidateChoice && isCorrectChoice && <span className="text-[9px] font-black uppercase tracking-wide text-emerald-400">✔ Correct</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="pl-5 mt-2 space-y-1.5 text-[12px] font-mono">
+                            <div><span className="font-bold mr-2" style={{ color: Dim }}>Your answer:</span><span style={{ color: isCorrect ? '#22c55e' : '#f43f5e' }}>{candidateAns || '[No Answer]'}</span></div>
+                            <div><span className="font-bold mr-2" style={{ color: Dim }}>Correct:</span><span style={{ color: '#22c55e' }}>{correctAns}</span></div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex justify-end p-6 border-t border-br bg-sf2">
-              <button 
-                onClick={() => setSelectedAttempt(null)}
-                className="btn bg-neutral-800 hover:bg-neutral-700 text-kh transition-colors py-2.5 px-6 rounded font-mn text-[12.5px] uppercase border border-br font-bold"
-              >
+            {/* Footer */}
+            <div className="flex justify-end p-5 border-t" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
+              <button onClick={() => setSelectedAttempt(null)} className="btn btn-secondary px-6 py-2.5 uppercase tracking-widest text-[12px]">
                 Close Scorecard
               </button>
             </div>
-
           </div>
         </div>
       )}
-
-      {/* (Manual override modal removed) */}
     </div>
   );
 }

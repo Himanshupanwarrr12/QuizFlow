@@ -2,628 +2,382 @@ import { useState, useEffect, useRef } from 'react';
 import { examService, questionService, candidateService, resultService } from '../services/api';
 
 const AVAILABLE_UNITS = [
-  'HQ BEG', '21 Engr Regt', '22 Engr Regt', 'A Coy', 'B Coy', 'C Coy', 
-  'HQ Coy', 'Support Coy', 'Field Coy', 'Workshop', 'Signals Platoon'
+  'HQ BEG','21 Engr Regt','22 Engr Regt','A Coy','B Coy','C Coy',
+  'HQ Coy','Support Coy','Field Coy','Workshop','Signals Platoon'
 ];
 
-const defaultForm = {
-  title: '',
-  code: '',
-  subject: '',
-  course: 'Basic Combat Engineering',
-  durationMinutes: 30,
-  allowedAttempts: 1,
-  units: [],
-  randomizeOrder: true,
-  shuffleOptions: false,
-  showResult: true,
+const DEFAULT_FORM = {
+  title: '', code: '', subject: '', course: '',
+  durationMinutes: 30, allowedAttempts: 1, units: [],
+  randomizeOrder: true, shuffleOptions: false, showResult: true,
   instructions: '1. All questions are compulsory.\n2. Do not switch tabs during the exam.\n3. Submit before timer expires.',
-  questionIds: [],
-  mcqCount: '',
-  fillblankCount: '',
-  truefalseCount: ''
+  questionIds: [], mcqMustKnowCount: '', mcqCouldKnowCount: '', mcqMayKnowCount: '', fillblankMustKnowCount: '', fillblankCouldKnowCount: '', fillblankMayKnowCount: '', truefalseMustKnowCount: '', truefalseCouldKnowCount: '', truefalseMayKnowCount: ''
 };
 
+const G   = 'var(--gold)';
+const Dim = 'var(--tx-mute)';
+
+const Toggle = ({ value, onChange, label }) => (
+  <div className="flex items-center gap-2.5">
+    <button type="button" onClick={() => onChange(!value)}
+      className={`w-10 h-5 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${value ? 'bg-emerald-600' : 'bg-neutral-700'}`}>
+      <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform ${value ? 'translate-x-5' : 'translate-x-0'}`} />
+    </button>
+    <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: Dim }}>{label}</span>
+  </div>
+);
+
 export default function Exams() {
-  const [exams, setExams] = useState([]);
+  const [exams,     setExams]     = useState([]);
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,   setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingExamId, setEditingExamId] = useState(null);
-  const [formData, setFormData] = useState(defaultForm);
-  const [categoryFilter, setCategoryFilter] = useState('All');
-  const [submitting, setSubmitting] = useState(false);
+  const [formData,  setFormData]  = useState(DEFAULT_FORM);
+  const [submitting,setSubmitting]= useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const handleImportClick = () => {
-    fileInputRef.current.click();
-  };
+  // Grading console state
+  const [gradingConsoleOpen,    setGradingConsoleOpen]    = useState(false);
+  const [selectedGradingExam,   setSelectedGradingExam]   = useState(null);
+  const [allCandidatesList,     setAllCandidatesList]     = useState([]);
+  const [examAttemptsList,      setExamAttemptsList]      = useState([]);
+  const [gradingSearchQuery,    setGradingSearchQuery]    = useState('');
+  const [gradingUnitFilter,     setGradingUnitFilter]     = useState('');
+  const [loadingGradingData,    setLoadingGradingData]    = useState(false);
+  const [activeGradingCandidate,setActiveGradingCandidate]= useState(null);
+  const [gradingQuizScore,      setGradingQuizScore]      = useState(0);
+  const [gradingPracticalMarks, setGradingPracticalMarks] = useState(0);
+  const [gradingVivaMarks,      setGradingVivaMarks]      = useState(0);
+  const [gradingSubjectiveMarks,setGradingSubjectiveMarks]= useState(0);
+  const [gradingReason,         setGradingReason]         = useState('First time grading');
+  const [gradingError,          setGradingError]          = useState('');
+  const [gradingSubmitting,     setGradingSubmitting]     = useState(false);
 
+  // ── CSV import ────────────────────────────────────────────────────────────
   const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
-
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
     try {
       setUploading(true);
-      const res = await questionService.uploadQuestions(formDataUpload);
-      
-      e.target.value = null; // Clear input value
-      
-      if (res.data && res.data.questions) {
-        const newQuestions = res.data.questions;
-        const newQuestionIds = newQuestions.map(q => q.id);
-        
-        // Refresh question list in state so they are rendered
+      const res = await questionService.uploadQuestions(fd);
+      e.target.value = null;
+      if (res.data?.questions) {
+        const nq = res.data.questions;
         await fetchData();
-        
-        // Replace selected questions with only the newly imported ones and force randomizeOrder to true
-        let mcq = 0;
-        let fill = 0;
-        let tf = 0;
-        newQuestions.forEach(q => {
-          if (q.type === 'mcq') mcq++;
-          else if (q.type === 'fillblank') fill++;
-          else if (q.type === 'truefalse') tf++;
+        let mcqMustKnow=0, mcqCouldKnow=0, mcqMayKnow=0, fillMustKnow=0, fillCouldKnow=0, fillMayKnow=0, tfMustKnow=0, tfCouldKnow=0, tfMayKnow=0;
+        nq.forEach(q => { 
+          if(q.type==='mcq') {
+            if(q.category==='Must Know') mcqMustKnow++;
+            else if(q.category==='Could Know') mcqCouldKnow++;
+            else if(q.category==='May Know') mcqMayKnow++;
+          }
+          else if(q.type==='fillblank') {
+            if(q.category==='Must Know') fillMustKnow++;
+            else if(q.category==='Could Know') fillCouldKnow++;
+            else if(q.category==='May Know') fillMayKnow++;
+          } 
+          else if(q.type==='truefalse') {
+            if(q.category==='Must Know') tfMustKnow++;
+            else if(q.category==='Could Know') tfCouldKnow++;
+            else if(q.category==='May Know') tfMayKnow++;
+          } 
         });
-
-        setFormData(prev => ({
-          ...prev,
-          questionIds: newQuestionIds,
-          randomizeOrder: true,
-          mcqCount: mcq,
-          fillblankCount: fill,
-          truefalseCount: tf
+        setFormData(p => ({ 
+          ...p, 
+          questionIds: nq.map(q=>q.id), 
+          randomizeOrder: true, 
+          mcqMustKnowCount: mcqMustKnow, 
+          mcqCouldKnowCount: mcqCouldKnow, 
+          mcqMayKnowCount: mcqMayKnow, 
+          fillblankMustKnowCount: fillMustKnow, 
+          fillblankCouldKnowCount: fillCouldKnow, 
+          fillblankMayKnowCount: fillMayKnow, 
+          truefalseMustKnowCount: tfMustKnow, 
+          truefalseCouldKnowCount: tfCouldKnow, 
+          truefalseMayKnowCount: tfMayKnow 
         }));
-        
-        alert(`Successfully imported ${res.data.count} questions for this exam! Counts updated to ${mcq} MCQs, ${fill} Fillups, and ${tf} True/False. Order of questions is randomized.`);
-      } else {
-        alert('Imported questions, but did not receive database records.');
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to upload questions');
-      console.error(err);
-    } finally {
-      setUploading(false);
-    }
+        alert(`Imported ${res.data.count} questions. MCQ (Must Know): ${mcqMustKnow}, MCQ (Could Know): ${mcqCouldKnow}, MCQ (May Know): ${mcqMayKnow}, Fill (Must Know): ${fillMustKnow}, Fill (Could Know): ${fillCouldKnow}, Fill (May Know): ${fillMayKnow}, T/F (Must Know): ${tfMustKnow}, T/F (Could Know): ${tfCouldKnow}, T/F (May Know): ${tfMayKnow}`);
+      } else alert('Imported but no records received.');
+    } catch (err) { alert(err.response?.data?.message||'Failed to upload'); }
+    finally { setUploading(false); }
   };
 
   const handleTemplateDownload = () => {
-    const csvHeaders = ["type", "text", "option_A", "option_B", "option_C", "option_D", "correct_options(A,B,C...)", "category", "subject", "topic", "difficulty", "bloom", "marks", "explanation"];
-    const csvRows = [
-      ["mcq", "What is the primary role of a Combat Engineer?", "Bridging", "Breaching", "Mine Warfare", "All of the above", "D", "Must Know", "Combat Engineering", "Fundamentals", "Medium", "Knowledge", "2", "Combat engineers do bridging, breaching and mines."],
-      ["truefalse", "Earth is round.", "True", "False", "", "", "A", "Could Know", "Science", "Earth", "Easy", "Knowledge", "1", "Yes, Earth is an oblate spheroid."],
-      ["fillblank", "The speed of light is _____ km/s.", "", "", "", "", "299792", "Must Know", "Physics", "Light", "Hard", "Knowledge", "2", "Speed of light is 299792 km/s."]
+    const h = ['type','text','option_A','option_B','option_C','option_D','correct_options(A,B,C...)','category','subject','marks'];
+    const rows = [
+      ['mcq','Which CSS property changes text color?','font-color','text-color','color','background-color','C','Must Know','CSS','1'],
+      ['mcq','Which company developed React?','Google','Meta','Microsoft','Amazon','B','Must Know','React','1'],
+      ['truefalse','JavaScript can be used for backend development.','TRUE','FALSE','','','A','Must Know','JavaScript','1'],
+      ['fillblank','The img tag is used to insert an image in HTML.','','','','','img','Must Know','HTML','1']
     ];
-
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [csvHeaders.join(","), ...csvRows.map(r => r.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "quizflow_question_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csv = 'data:text/csv;charset=utf-8,' + [h.join(','), ...rows.map(r=>r.map(c=>`"${(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href=encodeURI(csv); a.download='quizflow_question_template.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-
-  // State for the new Grading Console Feature
-  const [gradingConsoleOpen, setGradingConsoleOpen] = useState(false);
-  const [selectedGradingExam, setSelectedGradingExam] = useState(null);
-  const [allCandidatesList, setAllCandidatesList] = useState([]);
-  const [examAttemptsList, setExamAttemptsList] = useState([]);
-  const [gradingSearchQuery, setGradingSearchQuery] = useState('');
-  const [gradingUnitFilter, setGradingUnitFilter] = useState('');
-  const [loadingGradingData, setLoadingGradingData] = useState(false);
-
-  // States for the inline score sheet form
-  const [activeGradingCandidate, setActiveGradingCandidate] = useState(null);
-  const [gradingQuizScore, setGradingQuizScore] = useState(0);
-  const [gradingPracticalMarks, setGradingPracticalMarks] = useState(0);
-  const [gradingVivaMarks, setGradingVivaMarks] = useState(0);
-  const [gradingSubjectiveMarks, setGradingSubjectiveMarks] = useState(0);
-  const [gradingReason, setGradingReason] = useState('First time grading');
-  const [gradingError, setGradingError] = useState('');
-  const [gradingSubmitting, setGradingSubmitting] = useState(false);
-
+  // ── Grading console ───────────────────────────────────────────────────────
   const handleOpenGradingConsole = async (exam) => {
-    setSelectedGradingExam(exam);
-    setGradingConsoleOpen(true);
-    setLoadingGradingData(true);
-    setGradingSearchQuery('');
-    setGradingUnitFilter('');
-    setActiveGradingCandidate(null);
-
+    setSelectedGradingExam(exam); setGradingConsoleOpen(true); setLoadingGradingData(true);
+    setGradingSearchQuery(''); setGradingUnitFilter(''); setActiveGradingCandidate(null);
     try {
-      // 1. Fetch all candidates (load up to 1000 to include full registries)
-      const candidatesRes = await candidateService.getCandidates({ limit: 1000 });
-      setAllCandidatesList(candidatesRes.data?.candidates || []);
-
-      // 2. Fetch all attempts for this exam
-      const resultsRes = await resultService.getResults({ examId: exam.id });
-      setExamAttemptsList(resultsRes.data?.results || []);
-    } catch (err) {
-      alert("Failed to load grading roster: " + (err.response?.data?.message || err.message));
-    } finally {
-      setLoadingGradingData(false);
-    }
+      const [cRes, rRes] = await Promise.all([candidateService.getCandidates({limit:1000}), resultService.getResults({examId:exam.id})]);
+      setAllCandidatesList(cRes.data?.candidates||[]);
+      setExamAttemptsList(rRes.data?.results||[]);
+    } catch (err) { alert('Failed to load grading roster: '+(err.response?.data?.message||err.message)); }
+    finally { setLoadingGradingData(false); }
   };
 
-  const handleOpenCandidateGradeForm = (candidate, existingAttempt = null) => {
-    setActiveGradingCandidate(candidate);
-    setGradingError('');
-    setGradingReason(existingAttempt?.reason || 'Administrative marks allocation');
-
-    if (existingAttempt) {
-      setGradingQuizScore(existingAttempt.quizScore !== undefined ? existingAttempt.quizScore : 0);
-      setGradingPracticalMarks(existingAttempt.practicalMarks !== undefined ? existingAttempt.practicalMarks : 0);
-      setGradingVivaMarks(existingAttempt.vivaMarks !== undefined ? existingAttempt.vivaMarks : 0);
-      setGradingSubjectiveMarks(existingAttempt.subjectiveMarks !== undefined ? existingAttempt.subjectiveMarks : 0);
-    } else {
-      setGradingQuizScore(0);
-      setGradingPracticalMarks(0);
-      setGradingVivaMarks(0);
-      setGradingSubjectiveMarks(0);
-    }
+  const handleOpenCandidateGradeForm = (candidate, existing=null) => {
+    setActiveGradingCandidate(candidate); setGradingError('');
+    setGradingReason(existing?.reason||'Administrative marks allocation');
+    setGradingQuizScore(existing?.quizScore??0);
+    setGradingPracticalMarks(existing?.practicalMarks??0);
+    setGradingVivaMarks(existing?.vivaMarks??0);
+    setGradingSubjectiveMarks(existing?.subjectiveMarks??0);
   };
 
   const handleSaveCandidateGrades = async (e) => {
     e.preventDefault();
-    if (!activeGradingCandidate || !selectedGradingExam) return;
-
+    if (!activeGradingCandidate||!selectedGradingExam) return;
     setGradingError('');
-    const parsedQuiz = parseInt(gradingQuizScore);
-    const parsedPractical = parseInt(gradingPracticalMarks);
-    const parsedViva = parseInt(gradingVivaMarks);
-
-    if (isNaN(parsedQuiz) || parsedQuiz < 0 || parsedQuiz > selectedGradingExam.totalMarks) {
-      setGradingError(`Subjective (Written Exam) marks must be between 0 and ${selectedGradingExam.totalMarks}.`);
-      return;
-    }
-    if (isNaN(parsedPractical) || parsedPractical < 0 || parsedPractical > 20) {
-      setGradingError('Practical marks must be between 0 and 20.');
-      return;
-    }
-    if (isNaN(parsedViva) || parsedViva < 0 || parsedViva > 20) {
-      setGradingError('Viva marks must be between 0 and 20.');
-      return;
-    }
-
+    const pQ=parseInt(gradingQuizScore), pP=parseInt(gradingPracticalMarks), pV=parseInt(gradingVivaMarks);
+    if (isNaN(pQ)||pQ<0||pQ>selectedGradingExam.totalMarks) { setGradingError(`Written score must be 0–${selectedGradingExam.totalMarks}.`); return; }
+    if (isNaN(pP)||pP<0||pP>20) { setGradingError('Practical must be 0–20.'); return; }
+    if (isNaN(pV)||pV<0||pV>20) { setGradingError('Viva must be 0–20.'); return; }
     try {
       setGradingSubmitting(true);
-
-      // Check if attempt exists
-      let attempt = examAttemptsList.find(a => a.candidateId === activeGradingCandidate.id);
+      let attempt = examAttemptsList.find(a=>a.candidateId===activeGradingCandidate.id);
       let attemptId;
-
-      if (!attempt) {
-        // Initialize placeholders record
-        const initRes = await resultService.initializeAttempt({
-          candidateId: activeGradingCandidate.id,
-          examId: selectedGradingExam.id
-        });
-        attemptId = initRes.data?.attempt?.id;
-      } else {
-        attemptId = attempt.id;
-      }
-
-      // Override/Save Marks
-      await resultService.overrideMarks(attemptId, {
-        newMarks: parsedQuiz,
-        practicalMarks: parsedPractical,
-        vivaMarks: parsedViva,
-        subjectiveMarks: 0,
-        reason: gradingReason.trim()
-      });
-
-      // Refresh attempts lists
-      const resultsRes = await resultService.getResults({ examId: selectedGradingExam.id });
-      setExamAttemptsList(resultsRes.data?.results || []);
+      if (!attempt) { const ir = await resultService.initializeAttempt({candidateId:activeGradingCandidate.id, examId:selectedGradingExam.id}); attemptId=ir.data?.attempt?.id; }
+      else { attemptId=attempt.id; }
+      await resultService.overrideMarks(attemptId, {newMarks:pQ, practicalMarks:pP, vivaMarks:pV, subjectiveMarks:0, reason:gradingReason.trim()});
+      const rRes = await resultService.getResults({examId:selectedGradingExam.id});
+      setExamAttemptsList(rRes.data?.results||[]);
       setActiveGradingCandidate(null);
-    } catch (err) {
-      setGradingError(err.response?.data?.message || 'Failed to save composite candidate grades.');
-    } finally {
-      setGradingSubmitting(false);
-    }
+    } catch (err) { setGradingError(err.response?.data?.message||'Failed to save grades.'); }
+    finally { setGradingSubmitting(false); }
   };
 
+  // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch examinations
-      try {
-        const examsRes = await examService.getExams();
-        setExams(examsRes.data?.exams || []);
-      } catch (err) {
-        console.error("Failed to load examinations:", err);
-      }
-
-      // Fetch questions
-      try {
-        const questionsRes = await questionService.getQuestions();
-        setQuestions(questionsRes.data?.questions || []);
-      } catch (err) {
-        console.error("Failed to load questions:", err);
-      }
-      
-    } catch (err) {
-      console.error("General error loading examinations data:", err);
-    } finally {
-      setLoading(false);
-    }
+      const [eRes, qRes] = await Promise.allSettled([examService.getExams(), questionService.getQuestions()]);
+      if (eRes.status==='fulfilled') setExams(eRes.value.data?.exams||[]);
+      if (qRes.status==='fulfilled') setQuestions(qRes.value.data?.questions||[]);
+    } catch (err) { console.error('Error loading exams data:', err); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    if (showModal) {
-      fetchData();
-    }
-  }, [showModal]);
+  useEffect(()=>{ fetchData(); },[]);
+  useEffect(()=>{ if(showModal) fetchData(); },[showModal]);
 
   const handleToggleActive = async (id) => {
-    try {
-      await examService.toggleExamStatus(id);
-      fetchData();
-    } catch (err) {
-      alert("Failed to toggle status: " + (err.response?.data?.message || err.message));
-    }
+    try { await examService.toggleExamStatus(id); fetchData(); }
+    catch (err) { alert('Failed to toggle: '+(err.response?.data?.message||err.message)); }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to permanently delete this examination?")) return;
-    try {
-      await examService.deleteExam(id);
-      fetchData();
-    } catch (err) {
-      alert("Failed to delete exam: " + (err.response?.data?.message || err.message));
-    }
+    if (!window.confirm('Permanently delete this examination?')) return;
+    try { await examService.deleteExam(id); fetchData(); }
+    catch (err) { alert('Failed to delete: '+(err.response?.data?.message||err.message)); }
   };
 
   const handleUnitClick = (unit) => {
-    setFormData(prev => {
-      const units = prev.units.includes(unit)
-        ? prev.units.filter(u => u !== unit)
-        : [...prev.units, unit];
-      return { ...prev, units };
-    });
-  };
-
-  const handleQuestionSelect = (qId) => {
-    setFormData(prev => {
-      const questionIds = prev.questionIds.includes(qId)
-        ? prev.questionIds.filter(id => id !== qId)
-        : [...prev.questionIds, qId];
-      return { ...prev, questionIds };
-    });
+    setFormData(p => ({ ...p, units: p.units.includes(unit) ? p.units.filter(u=>u!==unit) : [...p.units, unit] }));
   };
 
   const handleEditClick = (exam) => {
-    const selectedQuestionIds = exam.questions.map(eq => eq.questionId);
-    const unitsList = exam.units ? exam.units.split(", ").map(u => u.trim()) : [];
-    
-    // Count question types from the existing exam
-    let mcq = 0;
-    let fill = 0;
-    let tf = 0;
-    exam.questions.forEach(eq => {
-      const q = eq.question;
-      if (q) {
-        if (q.type === 'mcq') mcq++;
-        else if (q.type === 'fillblank') fill++;
-        else if (q.type === 'truefalse') tf++;
-      }
+    const qIds = exam.questions.map(eq=>eq.questionId);
+    const units = exam.units ? exam.units.split(', ').map(u=>u.trim()) : [];
+    let mcqMustKnow=0, mcqCouldKnow=0, mcqMayKnow=0, fillMustKnow=0, fillCouldKnow=0, fillMayKnow=0, tfMustKnow=0, tfCouldKnow=0, tfMayKnow=0;
+    exam.questions.forEach(eq => { 
+      const q=eq.question; 
+      if(q){
+        if(q.type==='mcq') {
+          if(q.category==='Must Know') mcqMustKnow++;
+          else if(q.category==='Could Know') mcqCouldKnow++;
+          else if(q.category==='May Know') mcqMayKnow++;
+        }
+        else if(q.type==='fillblank') {
+          if(q.category==='Must Know') fillMustKnow++;
+          else if(q.category==='Could Know') fillCouldKnow++;
+          else if(q.category==='May Know') fillMayKnow++;
+        }
+        else if(q.type==='truefalse') {
+          if(q.category==='Must Know') tfMustKnow++;
+          else if(q.category==='Could Know') tfCouldKnow++;
+          else if(q.category==='May Know') tfMayKnow++;
+        }
+      } 
     });
-
-    setFormData({
-      title: exam.title || '',
-      code: exam.code || '',
-      subject: exam.subject || '',
-      course: exam.course || 'Basic Combat Engineering',
-      durationMinutes: exam.durationMinutes || 30,
-      allowedAttempts: exam.allowedAttempts || 1,
-      units: unitsList,
-      randomizeOrder: exam.randomizeOrder ?? true,
-      shuffleOptions: exam.shuffleOptions ?? false,
-      showResult: exam.showResult ?? true,
-      instructions: exam.instructions || '',
-      questionIds: selectedQuestionIds,
-      mcqCount: mcq,
-      fillblankCount: fill,
-      truefalseCount: tf
-    });
-    setEditingExamId(exam.id);
-    setShowModal(true);
+    setFormData({ title:exam.title||'', code:exam.code||'', subject:exam.subject||'', course:exam.course||'',
+      durationMinutes:exam.durationMinutes||30, allowedAttempts:exam.allowedAttempts||1, units,
+      randomizeOrder:exam.randomizeOrder??true, shuffleOptions:exam.shuffleOptions??false, showResult:exam.showResult??true,
+      instructions:exam.instructions||'', questionIds:qIds, 
+      mcqMustKnowCount:mcqMustKnow, mcqCouldKnowCount:mcqCouldKnow, mcqMayKnowCount:mcqMayKnow,
+      fillblankMustKnowCount:fillMustKnow, fillblankCouldKnowCount:fillCouldKnow, fillblankMayKnowCount:fillMayKnow,
+      truefalseMustKnowCount:tfMustKnow, truefalseCouldKnowCount:tfCouldKnow, truefalseMayKnowCount:tfMayKnow });
+    setEditingExamId(exam.id); setShowModal(true);
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title) return alert("Exam title is required.");
-
-    // Randomly pick questionIds matching the specified type counts
-    const mcqQuestions = questions.filter(q => q.type === 'mcq');
-    const fillblankQuestions = questions.filter(q => q.type === 'fillblank');
-    const truefalseQuestions = questions.filter(q => q.type === 'truefalse');
-
-    const shuffleArray = (arr) => {
-      const copy = [...arr];
-      for (let i = copy.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-      }
-      return copy;
-    };
-
-    const selectedMcq = shuffleArray(mcqQuestions).slice(0, parseInt(formData.mcqCount) || 0);
-    const selectedFill = shuffleArray(fillblankQuestions).slice(0, parseInt(formData.fillblankCount) || 0);
-    const selectedTF = shuffleArray(truefalseQuestions).slice(0, parseInt(formData.truefalseCount) || 0);
-
-    const chosenQuestionIds = [
-      ...selectedMcq.map(q => q.id),
-      ...selectedFill.map(q => q.id),
-      ...selectedTF.map(q => q.id)
-    ];
-
-    if (chosenQuestionIds.length === 0) {
-      return alert("Please select at least one question by specifying MCQs, Fillups, or True/False count greater than 0.");
-    }
-
-    const payload = {
-      ...formData,
-      questionIds: chosenQuestionIds
-    };
-
+    if (!formData.title) return alert('Exam title is required.');
+    const shuffle = (arr) => { const c=[...arr]; for(let i=c.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[c[i],c[j]]=[c[j],c[i]];} return c; };
+    const chosen = [
+      ...shuffle(questions.filter(q=>q.type==='mcq' && q.category==='Must Know')).slice(0,parseInt(formData.mcqMustKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='mcq' && q.category==='Could Know')).slice(0,parseInt(formData.mcqCouldKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='mcq' && q.category==='May Know')).slice(0,parseInt(formData.mcqMayKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='fillblank' && q.category==='Must Know')).slice(0,parseInt(formData.fillblankMustKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='fillblank' && q.category==='Could Know')).slice(0,parseInt(formData.fillblankCouldKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='fillblank' && q.category==='May Know')).slice(0,parseInt(formData.fillblankMayKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='truefalse' && q.category==='Must Know')).slice(0,parseInt(formData.truefalseMustKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='truefalse' && q.category==='Could Know')).slice(0,parseInt(formData.truefalseCouldKnowCount)||0),
+      ...shuffle(questions.filter(q=>q.type==='truefalse' && q.category==='May Know')).slice(0,parseInt(formData.truefalseMayKnowCount)||0),
+    ].map(q=>q.id);
+    if (chosen.length===0) return alert('Please specify at least one question type count > 0.');
     try {
       setSubmitting(true);
-      if (editingExamId) {
-        await examService.updateExam(editingExamId, payload);
-      } else {
-        await examService.createExam(payload);
-      }
-      setShowModal(false);
-      setFormData(defaultForm);
-      setEditingExamId(null);
-      fetchData();
-    } catch (err) {
-      alert(`Failed to ${editingExamId ? 'update' : 'create'} exam: ` + (err.response?.data?.message || err.message));
-    } finally {
-      setSubmitting(false);
-    }
+      if (editingExamId) await examService.updateExam(editingExamId, {...formData, questionIds:chosen});
+      else await examService.createExam({...formData, questionIds:chosen});
+      setShowModal(false); setFormData(DEFAULT_FORM); setEditingExamId(null); fetchData();
+    } catch (err) { alert(`Failed to ${editingExamId?'update':'create'} exam: `+(err.response?.data?.message||err.message)); }
+    finally { setSubmitting(false); }
   };
 
-  const filteredQuestions = categoryFilter === 'All'
-    ? questions
-    : questions.filter(q => q.category === categoryFilter);
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div>
-      {/* Page Header */}
-      <div className="flex justify-between items-end mb-6">
+    <div className="space-y-5 animate-fade-in">
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv,.xlsx,.xls" className="hidden" />
+
+      {/* Header */}
+      <div className="flex justify-between items-end flex-wrap gap-4">
         <div>
-          <div className="font-hd text-[34px] tracking-[3px] text-kh leading-none">EXAMINATIONS</div>
-          <div className="font-mn text-[10px] text-txd mt-1 tracking-[1px] uppercase">
-            CREATE · SCHEDULE · ACTIVATE · MANAGE
-          </div>
+          <div className="page-title">Examinations</div>
+          <div className="page-subtitle">Create · Schedule · Activate · Manage</div>
         </div>
-        <div className="flex space-x-3">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-            className="hidden" 
-          />
-          <button 
-            onClick={() => setShowModal(true)}
-            className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-5 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center"
-          >
-            <span className="mr-2">+</span> CREATE EXAMINATION
-          </button>
-        </div>
+        <button onClick={() => setShowModal(true)} className="btn btn-primary px-5 py-2.5 uppercase tracking-widest text-[12px]">
+          + Create Examination
+        </button>
       </div>
 
-      {/* Loading state */}
-      {loading && <div className="text-center py-12 font-mn text-txm">Loading examinations dashboard...</div>}
+      {loading && <div className="text-center py-12 text-[13px]" style={{ color: Dim }}>Loading examinations...</div>}
 
-      {/* Dashboard list of exams */}
       {!loading && exams.length === 0 && (
-        <div className="bg-sf border border-br rounded-md p-8 text-center font-mn text-txm">
-          No examinations scheduled. Click "CREATE EXAMINATION" to set up your first exam.
+        <div className="card text-center py-12">
+          <div className="text-4xl mb-3">📋</div>
+          <div className="text-[15px] font-bold uppercase tracking-wide mb-2" style={{ color: G }}>No Examinations Scheduled</div>
+          <p className="text-[13px]" style={{ color: Dim }}>Click "Create Examination" to set up your first exam.</p>
         </div>
       )}
 
-      <div className="space-y-4">
-        {!loading && exams.map((exam) => (
-          <div key={exam.id} className="bg-sf border border-br rounded-md p-5 relative overflow-hidden group">
-            {/* Left status vertical ribbon */}
-            <div className={`absolute top-0 bottom-0 left-0 w-[4px] ${exam.isActive ? 'bg-green-600' : 'bg-neutral-600'}`}></div>
-            
-            <div className="flex flex-col md:flex-row md:items-center justify-between pl-3">
-              <div className="space-y-1">
-                <div className="font-hd text-[20px] tracking-[1px] text-kh uppercase">{exam.title}</div>
-                <div className="font-mn text-[11px] text-txd tracking-[0.5px]">
-                  <span className="text-am font-semibold">{exam.code}</span> · {exam.questions.length}Q · {exam.totalMarks}M · {exam.durationMinutes}min · By {exam.createdBy || 'Maj S. Gupta'}
+      {/* Exam cards */}
+      <div className="space-y-3">
+        {!loading && exams.map(exam => (
+          <div key={exam.id} className="card relative overflow-hidden border-l-4"
+            style={{ borderLeftColor: exam.isActive ? '#22c55e' : '#4b5563' }}>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="text-[18px] font-black uppercase tracking-wide leading-tight mb-1" style={{ color: G }}>{exam.title}</div>
+                <div className="text-[12px] font-semibold" style={{ color: Dim }}>
+                  <span style={{ color: G }}>{exam.code}</span>
+                  {' · '}{exam.questions.length}Q · {exam.totalMarks}M · {exam.durationMinutes}min
+                  {exam.createdBy && ` · By ${exam.createdBy}`}
                 </div>
               </div>
 
-              {/* Action Buttons & Switches */}
-              <div className="flex items-center space-x-6 mt-4 md:mt-0">
-                <span className={`px-2 py-0.5 rounded font-mn text-[9px] uppercase tracking-[1px] ${
-                  exam.isActive 
-                    ? 'bg-green-950 text-green-400 border border-green-800' 
-                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
-                }`}>
-                  {exam.isActive ? 'LIVE' : 'INACTIVE'}
-                </span>
+              <div className="flex items-center flex-wrap gap-3">
+                <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
+                  exam.isActive ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/40'
+                                : 'bg-neutral-800/60 text-neutral-400 border border-neutral-700/40'
+                }`}>{exam.isActive ? 'Live' : 'Inactive'}</span>
 
-                {/* Slider Switch */}
-                <div className="flex items-center space-x-2">
-                  <span className="font-mn text-[10px] text-txm uppercase">Deactivate</span>
-                  <button 
-                    onClick={() => handleToggleActive(exam.id)}
-                    className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-300 relative focus:outline-none ${
-                      exam.isActive ? 'bg-green-600' : 'bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
-                      exam.isActive ? 'translate-x-5' : 'translate-x-0'
-                    }`}></div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold" style={{ color: Dim }}>Activate</span>
+                  <button onClick={() => handleToggleActive(exam.id)}
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${exam.isActive?'bg-emerald-600':'bg-neutral-700'}`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${exam.isActive?'translate-x-5':'translate-x-0'}`}/>
                   </button>
                 </div>
 
-                 {/* Add Marks Action */}
-                <button 
-                  onClick={() => handleOpenGradingConsole(exam)}
-                  className="btn bg-green-950/40 border border-green-800/60 hover:bg-green-900/40 text-green-400 transition-all py-1.5 px-3 rounded font-mn text-[10px] uppercase tracking-[1px] font-bold"
-                >
+                <button onClick={() => handleOpenGradingConsole(exam)}
+                  className="btn text-[11px] uppercase tracking-wider px-3 py-1.5"
+                  style={{ background:'rgba(34,197,94,0.1)', color:'#22c55e', border:'1px solid rgba(34,197,94,0.3)' }}>
                   📊 Add Marks
                 </button>
-
-                {/* Review / Edit action */}
-                <button 
-                  onClick={() => handleEditClick(exam)}
-                  className="btn bg-kh/10 border border-kh/30 hover:bg-kh/20 transition-colors py-1.5 px-3 rounded font-mn text-[10px] text-kh uppercase tracking-[1px]"
-                >
+                <button onClick={() => handleEditClick(exam)}
+                  className="btn btn-secondary text-[11px] uppercase tracking-wider px-3 py-1.5">
                   Review / Edit
                 </button>
-
-                {/* Delete action */}
-                <button 
-                  onClick={() => handleDelete(exam.id)}
-                  className="btn bg-[#e74c3c]/10 border border-[#e74c3c]/30 hover:bg-[#e74c3c]/20 transition-colors py-1.5 px-3 rounded font-mn text-[10px] text-[#e74c3c] uppercase tracking-[1px]"
-                >
+                <button onClick={() => handleDelete(exam.id)} className="btn btn-danger text-[11px] uppercase tracking-wider px-3 py-1.5">
                   Delete
                 </button>
               </div>
             </div>
 
-            {/* Bottom Meta Tags */}
-            <div className="mt-4 pt-3 border-t border-br pl-3 flex flex-wrap gap-x-6 gap-y-2 font-mn text-[10px] text-txm">
-              <div>Units: <span className="text-kh font-semibold">{exam.units}</span></div>
-              <div>Attempts: <span className="text-kh font-semibold">{exam.allowedAttempts}</span></div>
-              <div>Randomize: <span className={exam.randomizeOrder ? "text-green-500 font-semibold" : "text-txd font-semibold"}>{exam.randomizeOrder ? 'Yes' : 'No'}</span></div>
-              <div>Course: <span className="text-kh font-semibold">{exam.course}</span></div>
+            <div className="mt-4 pt-3 border-t flex flex-wrap gap-x-6 gap-y-1.5 text-[11px] font-semibold" style={{ borderColor:'var(--border)', color: Dim }}>
+              <span>Units: <span style={{ color: G }}>{exam.units}</span></span>
+              <span>Attempts: <span style={{ color: G }}>{exam.allowedAttempts}</span></span>
+              <span>Randomize: <span style={{ color: exam.randomizeOrder?'#22c55e':Dim }}>{exam.randomizeOrder?'Yes':'No'}</span></span>
+              <span>Course: <span style={{ color: G }}>{exam.course}</span></span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* CREATE EXAMINATION MODAL */}
+      {/* ── CREATE / EDIT EXAM MODAL ─────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-sf border border-br rounded-lg w-full max-w-4xl max-h-[95vh] overflow-y-auto shadow-2xl p-8 relative animate-fade-in">
-            <button 
-              onClick={() => {
-                setShowModal(false);
-                setFormData(defaultForm);
-                setEditingExamId(null);
-              }}
-              className="absolute top-4 right-4 text-txd hover:text-kh text-xl font-mn transition-colors"
-            >
-              ✕
-            </button>
-            <div className="font-hd text-[26px] text-kh tracking-[2px] mb-6">
-              {editingExamId ? 'REVIEW & EDIT EXAMINATION' : 'CREATE EXAMINATION'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(10,26,16,0.9)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-4xl max-h-[95vh] overflow-y-auto rounded-2xl border p-8 animate-fade-in"
+            style={{ background: 'var(--bg-3)', borderColor: 'var(--border)' }}>
+            <div className="flex justify-between items-center mb-6">
+              <div className="text-[22px] font-black uppercase tracking-wide" style={{ color: G }}>
+                {editingExamId ? 'Review & Edit Examination' : 'Create Examination'}
+              </div>
+              <button onClick={() => { setShowModal(false); setFormData(DEFAULT_FORM); setEditingExamId(null); }}
+                className="text-[20px] cursor-pointer" style={{ color: Dim }}
+                onMouseEnter={e=>e.currentTarget.style.color='var(--tx)'} onMouseLeave={e=>e.currentTarget.style.color=Dim}>✕</button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Exam Title</label>
-                  <input 
-                    type="text" 
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="e.g. Combat Engineering Fundamentals" 
-                    className="form-input bg-sf" 
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Exam Code</label>
-                  <input 
-                    type="text" 
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder="Auto-generated if blank" 
-                    className="form-input bg-sf" 
-                  />
+            <form onSubmit={handleFormSubmit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="form-label">Exam Title *</label>
+                  <input type="text" value={formData.title} onChange={e=>setFormData({...formData,title:e.target.value})} placeholder="e.g. Combat Engineering Fundamentals" className="form-input" required /></div>
+                <div><label className="form-label">Exam Code</label>
+                  <input type="text" value={formData.code} onChange={e=>setFormData({...formData,code:e.target.value})} placeholder="Auto-generated if blank" className="form-input" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="form-label">Subject</label>
+                  <input type="text" value={formData.subject} onChange={e=>setFormData({...formData,subject:e.target.value})} placeholder="e.g. Combat Engineering" className="form-input" /></div>
+                <div><label className="form-label">Course</label>
+                  <input type="text" list="course-list" value={formData.course} onChange={e=>setFormData({...formData,course:e.target.value})} placeholder="e.g. Basic Combat Engineering" className="form-input" />
+                  <datalist id="course-list">
+                    {[...new Set(exams.map(ex => ex.course).filter(Boolean))].map(c => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Subject</label>
-                  <input 
-                    type="text" 
-                    value={formData.subject}
-                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    placeholder="e.g. Combat Engineering" 
-                    className="form-input bg-sf" 
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Course</label>
-                  <select 
-                    value={formData.course}
-                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                    className="form-input bg-sf text-white"
-                  >
-                    <option value="Basic Combat Engineering">Basic Combat Engineering</option>
-                    <option value="Advanced Bridging">Advanced Bridging</option>
-                    <option value="All Courses">All Courses</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="form-label">Duration (Minutes)</label>
+                  <input type="number" value={formData.durationMinutes} onChange={e=>setFormData({...formData,durationMinutes:parseInt(e.target.value)||30})} className="form-input" required /></div>
+                <div><label className="form-label">Allowed Attempts</label>
+                  <input type="number" value={formData.allowedAttempts} onChange={e=>setFormData({...formData,allowedAttempts:parseInt(e.target.value)||1})} className="form-input" required /></div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Duration (Min)</label>
-                  <input 
-                    type="number" 
-                    value={formData.durationMinutes}
-                    onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 30 })}
-                    className="form-input bg-sf" 
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Allowed Attempts</label>
-                  <input 
-                    type="number" 
-                    value={formData.allowedAttempts}
-                    onChange={(e) => setFormData({ ...formData, allowedAttempts: parseInt(e.target.value) || 1 })}
-                    className="form-input bg-sf" 
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Assign to Units */}
+              {/* Units */}
               <div>
                 <label className="form-label mb-2">Assign to Units</label>
                 <div className="flex flex-wrap gap-2">
                   {AVAILABLE_UNITS.map(unit => {
-                    const isSelected = formData.units.includes(unit);
+                    const sel = formData.units.includes(unit);
                     return (
-                      <button 
-                        type="button" 
-                        key={unit}
-                        onClick={() => handleUnitClick(unit)}
-                        className={`py-1.5 px-3 rounded font-mn text-[10px] tracking-[0.5px] uppercase border transition-all duration-200 ${
-                          isSelected 
-                            ? 'bg-am/10 border-am text-kh shadow-sm shadow-am/20' 
-                            : 'bg-sf border-br text-txm hover:border-kh'
-                        }`}
-                      >
+                      <button key={unit} type="button" onClick={()=>handleUnitClick(unit)}
+                        className="py-1.5 px-3 rounded text-[11px] font-bold uppercase tracking-wide border transition-all cursor-pointer"
+                        style={sel ? {background:'rgba(201,162,39,0.15)',borderColor:G,color:G} : {background:'rgba(0,0,0,0.2)',borderColor:'var(--border)',color:Dim}}>
                         {unit}
                       </button>
                     );
@@ -632,284 +386,164 @@ export default function Exams() {
               </div>
 
               {/* Toggles */}
-              <div className="flex flex-wrap gap-6 py-2 border-y border-br">
-                <div className="flex items-center space-x-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({ ...formData, randomizeOrder: !formData.randomizeOrder })}
-                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
-                      formData.randomizeOrder ? 'bg-green-600' : 'bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                      formData.randomizeOrder ? 'translate-x-4' : 'translate-x-0'
-                    }`}></div>
-                  </button>
-                  <span className="font-mn text-[10px] text-txm uppercase">Randomize Q order</span>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({ ...formData, shuffleOptions: !formData.shuffleOptions })}
-                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
-                      formData.shuffleOptions ? 'bg-green-600' : 'bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                      formData.shuffleOptions ? 'translate-x-4' : 'translate-x-0'
-                    }`}></div>
-                  </button>
-                  <span className="font-mn text-[10px] text-txm uppercase">Shuffle Options</span>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({ ...formData, showResult: !formData.showResult })}
-                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none ${
-                      formData.showResult ? 'bg-green-600' : 'bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                      formData.showResult ? 'translate-x-4' : 'translate-x-0'
-                    }`}></div>
-                  </button>
-                  <span className="font-mn text-[10px] text-txm uppercase">Show result after submit</span>
-                </div>
+              <div className="flex flex-wrap gap-6 py-3 border-y" style={{ borderColor:'var(--border)' }}>
+                <Toggle value={formData.randomizeOrder} onChange={v=>setFormData({...formData,randomizeOrder:v})} label="Randomize Q Order" />
+                <Toggle value={formData.shuffleOptions}  onChange={v=>setFormData({...formData,shuffleOptions:v})}  label="Shuffle Options" />
+                <Toggle value={formData.showResult}      onChange={v=>setFormData({...formData,showResult:v})}      label="Show Result After Submit" />
               </div>
 
               {/* Instructions */}
               <div>
                 <label className="form-label">Instructions</label>
-                <textarea 
-                  rows="3" 
-                  value={formData.instructions}
-                  onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-                  placeholder="Exam instructions..." 
-                  className="form-input bg-sf resize-none" 
-                />
+                <textarea rows="3" value={formData.instructions} onChange={e=>setFormData({...formData,instructions:e.target.value})}
+                  placeholder="Exam instructions..." className="form-input resize-none" />
               </div>
 
-              {/* Question Selection Section */}
-              <div className="border-t border-br pt-6">
+              {/* Question auto-select */}
+              <div className="border-t pt-5" style={{ borderColor:'var(--border)' }}>
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <label className="form-label mb-0 text-kh tracking-[1px] uppercase text-[12px]">Auto-Select Questions from Pool</label>
-                    <div className="text-[10px] text-txm uppercase mt-0.5">Specify counts to randomly choose questions for this exam</div>
+                    <div className="text-[13px] font-bold uppercase tracking-wide" style={{ color: G }}>Auto-Select Questions from Pool</div>
+                    <div className="text-[11px] font-semibold uppercase mt-0.5" style={{ color: Dim }}>Specify counts to randomly choose questions</div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      type="button"
-                      onClick={handleTemplateDownload}
-                      className="btn bg-sf border border-br text-[10px] text-txm hover:border-am transition-colors py-1.5 px-2.5 rounded font-mn tracking-[0.5px] uppercase flex items-center"
-                    >
-                      Template
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={handleImportClick}
-                      disabled={uploading}
-                      className="btn bg-[#2980b9] hover:bg-[#3498db] text-white transition-colors py-1.5 px-2.5 rounded font-mn text-[10px] tracking-[0.5px] uppercase flex items-center disabled:opacity-50"
-                    >
-                      {uploading ? 'UPLOADING...' : 'IMPORT CSV'}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={handleTemplateDownload} className="btn btn-secondary py-1.5 px-3 text-[10px] uppercase">Template</button>
+                    <button type="button" onClick={()=>fileInputRef.current.click()} disabled={uploading} className="btn py-1.5 px-3 text-[10px] uppercase font-bold"
+                      style={{ background:'rgba(56,189,248,0.1)', color:'#38bdf8', border:'1px solid rgba(56,189,248,0.3)' }}>
+                      {uploading?'Uploading...':'Import CSV'}
                     </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-4 bg-sf2 border border-br rounded-md p-4">
-                  <div>
-                    <label className="form-label text-[11px]">MCQs Count</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={formData.mcqCount}
-                      onChange={(e) => setFormData({ ...formData, mcqCount: e.target.value })}
-                      className="form-input bg-sf text-white" 
-                    />
-                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'mcq').length}</span></div>
-                  </div>
-                  <div>
-                    <label className="form-label text-[11px]">Fillups Count</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={formData.fillblankCount}
-                      onChange={(e) => setFormData({ ...formData, fillblankCount: e.target.value })}
-                      className="form-input bg-sf text-white" 
-                    />
-                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'fillblank').length}</span></div>
-                  </div>
-                  <div>
-                    <label className="form-label text-[11px]">True/False Count</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={formData.truefalseCount}
-                      onChange={(e) => setFormData({ ...formData, truefalseCount: e.target.value })}
-                      className="form-input bg-sf text-white" 
-                    />
-                    <div className="font-mn text-[10px] text-txm mt-1">Available in pool: <span className="text-kh font-bold">{questions.filter(q => q.type === 'truefalse').length}</span></div>
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 rounded-xl p-4" style={{ background:'rgba(0,0,0,0.3)', border:'1px solid var(--border)' }}>
+                  {[
+                    { label:'MCQ (Must Know)', key:'mcqMustKnowCount', type:'mcq', category:'Must Know' },
+                    { label:'MCQ (Could Know)', key:'mcqCouldKnowCount', type:'mcq', category:'Could Know' },
+                    { label:'MCQ (May Know)', key:'mcqMayKnowCount', type:'mcq', category:'May Know' },
+                    { label:'Fill (Must Know)', key:'fillblankMustKnowCount', type:'fillblank', category:'Must Know' },
+                    { label:'Fill (Could Know)', key:'fillblankCouldKnowCount', type:'fillblank', category:'Could Know' },
+                    { label:'Fill (May Know)', key:'fillblankMayKnowCount', type:'fillblank', category:'May Know' },
+                    { label:'T/F (Must Know)', key:'truefalseMustKnowCount', type:'truefalse', category:'Must Know' },
+                    { label:'T/F (Could Know)', key:'truefalseCouldKnowCount', type:'truefalse', category:'Could Know' },
+                    { label:'T/F (May Know)', key:'truefalseMayKnowCount', type:'truefalse', category:'May Know' },
+                  ].map(({label,key,type,category}) => (
+                    <div key={key}>
+                      <label className="form-label">{label}</label>
+                      <input type="number" min="0" value={formData[key]} onChange={e=>setFormData({...formData,[key]:e.target.value})} className="form-input" />
+                      <div className="text-[10px] mt-1.5 font-semibold" style={{ color: Dim }}>
+                        Available: <span style={{ color: G }}>{
+                          questions.filter(q => q.type===type && q.category===category).length
+                        }</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-3 pt-4 border-t border-br">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setShowModal(false);
-                    setFormData(defaultForm);
-                    setEditingExamId(null);
-                  }}
-                  className="btn bg-sf border border-br text-txm hover:border-kh transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={submitting}
-                  className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase disabled:opacity-50 font-bold"
-                >
-                  {submitting ? (editingExamId ? 'Saving...' : 'Creating...') : (editingExamId ? 'Save Changes' : 'Create Exam')}
+              <div className="flex gap-3 pt-4 border-t" style={{ borderColor:'var(--border)' }}>
+                <button type="button" onClick={()=>{setShowModal(false);setFormData(DEFAULT_FORM);setEditingExamId(null);}}
+                  className="btn btn-secondary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">Cancel</button>
+                <button type="submit" disabled={submitting} className="btn btn-primary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">
+                  {submitting ? (editingExamId?'Saving...':'Creating...') : (editingExamId?'Save Changes':'Create Exam')}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-      {/* SQUAD GRADING ROSTER CONSOLE OVERLAY */}
+
+      {/* ── GRADING CONSOLE MODAL ────────────────────────────────────────── */}
       {gradingConsoleOpen && selectedGradingExam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto font-mn">
-          <div className="bg-sf border-2 border-am/40 rounded-lg w-full max-w-5xl max-h-[94vh] overflow-y-auto shadow-2xl relative animate-fade-in p-6">
-            
-            {/* Header */}
-            <div className="border-b border-br pb-4 mb-6 flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(10,26,16,0.9)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-full max-w-5xl max-h-[94vh] overflow-y-auto rounded-2xl border p-6 animate-fade-in"
+            style={{ background: 'var(--bg-3)', borderColor: 'rgba(201,162,39,0.4)' }}>
+            <div className="flex justify-between items-center pb-5 mb-5 border-b" style={{ borderColor:'var(--border)' }}>
               <div>
-                <span className="px-3 py-1 rounded text-[10px] uppercase tracking-[1.5px] bg-am/15 text-kh border border-am/25 font-bold">
-                  🛡️ secure squad grading console
+                <span className="text-[10px] font-black uppercase tracking-[3px] px-3 py-1 rounded"
+                  style={{ background:'rgba(201,162,39,0.1)', color:G, border:'1px solid rgba(201,162,39,0.25)' }}>
+                  🛡️ Secure Grading Console
                 </span>
-                <h3 className="font-hd text-[26px] text-kh uppercase tracking-[1px] mt-2.5 leading-none">
-                  Manual Marks Entry - {selectedGradingExam.title}
+                <h3 className="text-[22px] font-black uppercase tracking-wide mt-2.5 leading-none" style={{ color: G }}>
+                  Manual Marks — {selectedGradingExam.title}
                 </h3>
               </div>
-              <button 
-                onClick={() => setGradingConsoleOpen(false)}
-                className="text-txd hover:text-kh text-3xl font-bold transition-colors p-2"
-              >
-                ✕
-              </button>
+              <button onClick={()=>setGradingConsoleOpen(false)} className="text-[24px] font-bold cursor-pointer p-2 transition-colors"
+                style={{ color: Dim }} onMouseEnter={e=>e.currentTarget.style.color='var(--tx)'} onMouseLeave={e=>e.currentTarget.style.color=Dim}>✕</button>
             </div>
 
-            {/* Roster Filters (Search + Unit dropdown) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
               <div className="md:col-span-2">
-                <label className="block text-[10px] text-txm uppercase tracking-[1px] mb-1 font-bold">Search Candidate Details</label>
-                <input 
-                  type="text" 
-                  value={gradingSearchQuery}
-                  onChange={(e) => setGradingSearchQuery(e.target.value)}
-                  placeholder="Filter by name, rank, army number, unit, or trade..."
-                  className="form-input bg-sf w-full text-[13.5px] h-[40px] border border-br focus:border-am"
-                />
+                <label className="form-label">Search Candidate</label>
+                <input type="text" value={gradingSearchQuery} onChange={e=>setGradingSearchQuery(e.target.value)}
+                  placeholder="Filter by name, army number, unit, trade..." className="form-input" />
               </div>
               <div>
-                <label className="block text-[10px] text-txm uppercase tracking-[1px] mb-1 font-bold">Filter By Squad Unit</label>
-                <select 
-                  value={gradingUnitFilter}
-                  onChange={(e) => setGradingUnitFilter(e.target.value)}
-                  className="form-input bg-sf w-full text-[13.5px] h-[40px] border border-br focus:border-am"
-                >
+                <label className="form-label">Filter by Unit</label>
+                <select value={gradingUnitFilter} onChange={e=>setGradingUnitFilter(e.target.value)} className="form-input">
                   <option value="">All Units</option>
-                  {AVAILABLE_UNITS.map(unit => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
+                  {AVAILABLE_UNITS.map(u=><option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
             </div>
 
-            {/* Candidates Table */}
+            {/* Candidate table */}
             {loadingGradingData ? (
-              <div className="text-center py-12 text-txm text-[14px]">Loading squad registry...</div>
+              <div className="text-center py-12 text-[13px]" style={{ color: Dim }}>Loading squad registry...</div>
             ) : (
-              <div className="overflow-x-auto border border-br rounded bg-sf2/30 mb-6">
-                <table className="w-full text-left border-collapse font-mn">
+              <div className="overflow-x-auto rounded-xl border mb-5" style={{ borderColor:'var(--border)' }}>
+                <table className="data-table">
                   <thead>
-                    <tr className="bg-sf2 border-b border-br text-[11px] text-txd uppercase tracking-[0.5px]">
-                      <th className="p-4">Army Number</th>
-                      <th className="p-4">Rank & Name</th>
-                      <th className="p-4">Unit</th>
-                      <th className="p-4">Trade Specialty</th>
-                      <th className="p-4 text-center">Evaluation Status</th>
-                      <th className="p-4 text-right">Action</th>
+                    <tr>
+                      <th>Army Number</th>
+                      <th>Rank &amp; Name</th>
+                      <th>Unit</th>
+                      <th>Trade</th>
+                      <th className="text-center">Status</th>
+                      <th className="text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
-                      const filtered = allCandidatesList.filter(candidate => {
-                        const searchLower = gradingSearchQuery.toLowerCase();
-                        const matchesSearch = 
-                          candidate.name.toLowerCase().includes(searchLower) ||
-                          candidate.armyNumber.toLowerCase().includes(searchLower) ||
-                          candidate.rank.toLowerCase().includes(searchLower) ||
-                          candidate.unit.toLowerCase().includes(searchLower) ||
-                          candidate.trade.toLowerCase().includes(searchLower);
-
-                        const matchesUnit = !gradingUnitFilter || candidate.unit === gradingUnitFilter;
-
-                        return matchesSearch && matchesUnit;
+                      const filtered = allCandidatesList.filter(c => {
+                        const sl = gradingSearchQuery.toLowerCase();
+                        const ms = c.name.toLowerCase().includes(sl)||c.armyNumber.toLowerCase().includes(sl)||c.rank.toLowerCase().includes(sl)||c.unit.toLowerCase().includes(sl)||c.trade.toLowerCase().includes(sl);
+                        return ms && (!gradingUnitFilter||c.unit===gradingUnitFilter);
                       });
-
-                      if (filtered.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan="6" className="p-6 text-center text-txm text-[13px]">
-                              No candidates found matching the filters.
-                            </td>
-                          </tr>
-                        );
-                      }
-
+                      if (filtered.length===0) return <tr><td colSpan="6" className="py-10 text-center text-[13px]" style={{ color:Dim }}>No candidates found.</td></tr>;
                       return filtered.map(candidate => {
-                        // Find if candidate has attempt
-                        const attempt = examAttemptsList.find(a => a.candidateId === candidate.id);
-
+                        const attempt = examAttemptsList.find(a=>a.candidateId===candidate.id);
                         return (
-                          <tr key={candidate.id} className="border-b border-br hover:bg-sf2/15 transition-colors text-[13.5px] text-txm">
-                            <td className="p-4 font-bold text-kh uppercase">{candidate.armyNumber}</td>
-                            <td className="p-4 uppercase">{candidate.rank} {candidate.name}</td>
-                            <td className="p-4 uppercase font-semibold">{candidate.unit}</td>
-                            <td className="p-4 uppercase font-semibold">{candidate.trade}</td>
-                            <td className="p-4 text-center">
+                          <tr key={candidate.id}>
+                            <td className="font-mono font-bold" style={{ color: G }}>{candidate.armyNumber}</td>
+                            <td className="uppercase font-semibold" style={{ color:'var(--tx)' }}>{candidate.rank} {candidate.name}</td>
+                            <td className="uppercase" style={{ color: Dim }}>{candidate.unit}</td>
+                            <td style={{ color: Dim }}>{candidate.trade}</td>
+                            <td className="text-center">
                               {attempt ? (
                                 <div className="space-y-1">
-                                  <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-green-950 text-green-400 border border-green-800">
-                                    GRADED (Total: {attempt.score}/{attempt.totalMarks})
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-900/40 text-emerald-400 border border-emerald-700/40">
+                                    Graded ({attempt.score}/{attempt.totalMarks})
                                   </span>
-                                  <div className="text-[10px] text-txd">
-                                    Subj: {attempt.quizScore} | Prac: {attempt.practicalMarks} | Viva: {attempt.vivaMarks}
+                                  <div className="text-[10px]" style={{ color: Dim }}>
+                                    S:{attempt.quizScore} P:{attempt.practicalMarks} V:{attempt.vivaMarks}
                                   </div>
                                 </div>
                               ) : (
-                                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-neutral-900 text-neutral-400 border border-neutral-800">
-                                  NOT TAKEN
-                                </span>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-neutral-800/60 text-neutral-400 border border-neutral-700/40">Not Taken</span>
                               )}
                             </td>
-                            <td className="p-4 text-right">
+                            <td className="text-right">
                               {attempt ? (
-                                <button 
-                                  onClick={() => handleOpenCandidateGradeForm(candidate, attempt)}
-                                  className="btn bg-am/15 border border-am/35 hover:bg-am/30 text-am py-1.5 px-4 rounded text-[11px] uppercase tracking-[0.5px] font-bold"
-                                >
+                                <button onClick={()=>handleOpenCandidateGradeForm(candidate,attempt)}
+                                  className="btn text-[11px] uppercase tracking-wider px-4 py-1.5"
+                                  style={{ background:'rgba(201,162,39,0.1)', color:G, border:'1px solid rgba(201,162,39,0.3)' }}>
                                   ✎ Edit Marks
                                 </button>
                               ) : (
-                                <button 
-                                  onClick={() => handleOpenCandidateGradeForm(candidate, null)}
-                                  className="btn bg-green-950 border border-green-800 hover:bg-green-900 text-green-400 py-1.5 px-4 rounded text-[11px] uppercase tracking-[0.5px] font-bold"
-                                >
+                                <button onClick={()=>handleOpenCandidateGradeForm(candidate,null)}
+                                  className="btn text-[11px] uppercase tracking-wider px-4 py-1.5"
+                                  style={{ background:'rgba(34,197,94,0.1)', color:'#22c55e', border:'1px solid rgba(34,197,94,0.3)' }}>
                                   ✍ Add Marks
                                 </button>
                               )}
@@ -923,129 +557,66 @@ export default function Exams() {
               </div>
             )}
 
-            {/* Footer */}
-            <div className="flex justify-end pt-4 border-t border-br">
-              <button 
-                onClick={() => setGradingConsoleOpen(false)}
-                className="btn bg-neutral-800 hover:bg-neutral-700 text-kh transition-colors py-2 px-6 rounded text-[12px] uppercase border border-br font-bold"
-              >
-                Close Console
-              </button>
+            <div className="flex justify-end pt-4 border-t" style={{ borderColor:'var(--border)' }}>
+              <button onClick={()=>setGradingConsoleOpen(false)} className="btn btn-secondary px-6 py-2.5 uppercase tracking-widest text-[12px]">Close Console</button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* INDIVIDUAL INLINE CANDIDATE GRADING MODAL */}
+      {/* ── INLINE GRADE FORM MODAL ──────────────────────────────────────── */}
       {activeGradingCandidate && selectedGradingExam && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto font-mn">
-          <form 
-            onSubmit={handleSaveCandidateGrades}
-            className="bg-sf border-2 border-am/50 rounded-lg w-full max-w-lg shadow-2xl p-6 relative animate-fade-in"
-          >
-            <button 
-              type="button"
-              onClick={() => setActiveGradingCandidate(null)}
-              className="absolute top-4 right-4 text-txd hover:text-kh text-xl transition-colors"
-            >
-              ✕
-            </button>
-
-            {/* Title */}
-            <div className="border-b border-br pb-3 mb-4">
-              <span className="text-[10px] text-am tracking-[1.5px] uppercase font-bold">Roster Grade Entry Form</span>
-              <h4 className="text-[20px] text-kh tracking-[0.5px] uppercase mt-1 font-bold">Grade Candidate</h4>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(10,26,16,0.92)', backdropFilter: 'blur(6px)' }}>
+          <form onSubmit={handleSaveCandidateGrades}
+            className="w-full max-w-lg rounded-2xl border p-7 animate-fade-in"
+            style={{ background: 'var(--bg-3)', borderColor: 'rgba(201,162,39,0.4)' }}>
+            <div className="pb-4 mb-5 border-b" style={{ borderColor:'var(--border)' }}>
+              <span className="text-[10px] font-black uppercase tracking-[3px]" style={{ color: G }}>Roster Grade Entry Form</span>
+              <h4 className="text-[20px] font-black uppercase tracking-wide mt-1" style={{ color: G }}>Grade Candidate</h4>
             </div>
 
-            {/* Candidate Metadata Summary */}
-            <div className="bg-sf2 border border-br p-3 rounded text-[12px] space-y-1 mb-4 text-txm">
+            <div className="card !p-3 mb-5 space-y-1.5">
               <div>
-                <span className="text-txd uppercase text-[9.5px] tracking-[0.5px] block font-bold">Candidate Details:</span>
-                <span className="text-kh font-bold uppercase">{activeGradingCandidate.armyNumber} · {activeGradingCandidate.rank} {activeGradingCandidate.name}</span>
+                <span className="form-label">Candidate Details</span>
+                <span className="text-[13px] font-bold uppercase" style={{ color: G }}>{activeGradingCandidate.armyNumber} · {activeGradingCandidate.rank} {activeGradingCandidate.name}</span>
               </div>
               <div>
-                <span className="text-txd uppercase text-[9.5px] tracking-[0.5px] block font-bold">Assessment Title:</span>
-                <span className="text-kh font-bold">{selectedGradingExam.title} ({selectedGradingExam.code})</span>
+                <span className="form-label">Assessment</span>
+                <span className="text-[13px] font-bold" style={{ color: G }}>{selectedGradingExam.title} ({selectedGradingExam.code})</span>
               </div>
             </div>
 
-            {/* Error Message */}
-            {gradingError && (
-              <div className="bg-rose-950/20 border border-rose-800/60 text-rose-400 p-2.5 rounded text-[12px] mb-4 font-bold">
-                ⚠ {gradingError}
-              </div>
-            )}
+            {gradingError && <div className="alert-error mb-4">⚠ {gradingError}</div>}
 
-            {/* Input fields */}
-            <div className="space-y-4 mb-5 text-[12px] text-txm">
+            <div className="space-y-4 mb-5">
               <div>
-                <label className="block text-[11px] uppercase tracking-[1px] mb-1.5 font-bold">Subjective / Written Exam Score (Max {selectedGradingExam.totalMarks})</label>
-                <input 
-                  type="number"
-                  min="0"
-                  max={selectedGradingExam.totalMarks}
-                  value={gradingQuizScore}
-                  onChange={(e) => setGradingQuizScore(e.target.value)}
-                  className="form-input bg-sf text-[14px] font-semibold h-[40px] w-full text-white border border-br focus:border-am"
-                  required
-                />
+                <label className="form-label">Subjective / Written Score (Max {selectedGradingExam.totalMarks})</label>
+                <input type="number" min="0" max={selectedGradingExam.totalMarks} value={gradingQuizScore}
+                  onChange={e=>setGradingQuizScore(e.target.value)} className="form-input" required />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10.5px] uppercase tracking-[0.5px] mb-1.5 font-bold">Practical (Max 20)</label>
-                  <input 
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={gradingPracticalMarks}
-                    onChange={(e) => setGradingPracticalMarks(e.target.value)}
-                    className="form-input bg-sf text-[14px] font-semibold h-[40px] w-full text-white border border-br focus:border-am"
-                    required
-                  />
+                  <label className="form-label">Practical (Max 20)</label>
+                  <input type="number" min="0" max="20" value={gradingPracticalMarks}
+                    onChange={e=>setGradingPracticalMarks(e.target.value)} className="form-input" required />
                 </div>
                 <div>
-                  <label className="block text-[10.5px] uppercase tracking-[0.5px] mb-1.5 font-bold">Viva (Max 20)</label>
-                  <input 
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={gradingVivaMarks}
-                    onChange={(e) => setGradingVivaMarks(e.target.value)}
-                    className="form-input bg-sf text-[14px] font-semibold h-[40px] w-full text-white border border-br focus:border-am"
-                    required
-                  />
+                  <label className="form-label">Viva (Max 20)</label>
+                  <input type="number" min="0" max="20" value={gradingVivaMarks}
+                    onChange={e=>setGradingVivaMarks(e.target.value)} className="form-input" required />
                 </div>
               </div>
-
               <div>
-                <label className="block text-[11px] uppercase tracking-[1px] mb-1.5 font-bold">Audit Justification / Feedback *</label>
-                <textarea 
-                  value={gradingReason}
-                  onChange={(e) => setGradingReason(e.target.value)}
-                  rows="3"
-                  className="form-input bg-sf text-[13px] py-1.5 w-full text-white border border-br focus:border-am"
-                  placeholder="e.g. Assessment and manual evaluations entry..."
-                  required
-                />
+                <label className="form-label">Audit Justification *</label>
+                <textarea value={gradingReason} onChange={e=>setGradingReason(e.target.value)} rows="3"
+                  placeholder="e.g. Assessment and manual evaluation entry..." className="form-input resize-none" required />
               </div>
             </div>
 
-            {/* Footer Buttons */}
-            <div className="flex justify-end space-x-2 pt-3 border-t border-br">
-              <button 
-                type="button"
-                onClick={() => setActiveGradingCandidate(null)}
-                className="btn bg-neutral-800 hover:bg-neutral-700 text-kh transition-colors py-2 px-4 rounded text-[11px] uppercase border border-br font-bold"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit"
-                disabled={gradingSubmitting}
-                className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2 px-5 rounded text-[11px] font-bold uppercase flex items-center"
-              >
+            <div className="flex gap-3 pt-4 border-t" style={{ borderColor:'var(--border)' }}>
+              <button type="button" onClick={()=>setActiveGradingCandidate(null)} className="btn btn-secondary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">Cancel</button>
+              <button type="submit" disabled={gradingSubmitting} className="btn btn-primary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">
                 {gradingSubmitting ? 'Saving...' : '✓ Save Grades'}
               </button>
             </div>

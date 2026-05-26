@@ -1,0 +1,5 @@
+type,text,option_A,option_B,option_C,option_D,correct_options(A,B,C...),category,subject,marks
+mcq,Which CSS property changes text color?,font-color,text-color,color,background-color,C,Must Know,CSS,1
+mcq,Which company developed React?,Google,Meta,Microsoft,Amazon,B,Must Know,React,1
+truefalse,JavaScript can be used for backend development.,TRUE,FALSE,,,A,Must Know,JavaScript,1
+fillblank,The img tag is used to insert an image in HTML.,,,,,img,Must Know,HTML,1

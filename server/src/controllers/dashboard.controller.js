@@ -6,11 +6,12 @@ import ApiResponse from "../utils/ApiResponse.js";
 // @route   GET /api/v1/dashboard/stats
 // @access  Private (super_admin, exam_officer)
 export const getDashboardStats = asyncHandler(async (req, res) => {
-  const [candidatesCount, activeExamsCount, questionsCount, resultsCount] = await Promise.all([
+  const [candidatesCount, activeExamsCount, questionsCount, resultsCount, officersCount] = await Promise.all([
     prisma.user.count({ where: { role: "candidate" } }),
     prisma.exam.count({ where: { isActive: true } }),
     prisma.question.count(),
-    prisma.attempt.count({ where: { status: "submitted" } })
+    prisma.attempt.count({ where: { status: "submitted" } }),
+    prisma.user.count({ where: { role: "exam_officer" } })
   ]);
 
   // Construct realistic live activities feed based on db state
@@ -49,7 +50,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
           candidates: candidatesCount,
           activeExams: activeExamsCount,
           questions: questionsCount,
-          results: resultsCount
+          results: resultsCount,
+          officers: officersCount
         },
         activities
       }, 

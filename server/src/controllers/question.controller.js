@@ -39,7 +39,12 @@ export const uploadQuestions = asyncHandler(async (req, res) => {
       optionC: row["option_C"]?.toString().trim() || null,
       optionD: row["option_D"]?.toString().trim() || null,
       correctOptions: (row["correct_options(A,B,C...)"] || row["correct_options"])?.toString().trim() || "",
-      category: row["category"]?.toString().trim() || "Must Know",
+      category: (() => {
+        const cat = row["category"]?.toString().trim();
+        if (cat === "Could Know") return "Could Know";
+        if (cat === "May Know") return "May Know";
+        return "Must Know";
+      })(),
       subject: row["subject"]?.toString().trim() || "General",
       topic: row["topic"]?.toString().trim() || "General",
       difficulty: row["difficulty"]?.toString().trim() || "Medium",
@@ -49,16 +54,39 @@ export const uploadQuestions = asyncHandler(async (req, res) => {
     };
   });
 
-  // Batch insert into database using a transaction
-  const createdQuestions = await prisma.$transaction(
-    questionsToInsert.map(q => prisma.question.create({ data: q }))
-  );
+  // Batch insert or update questions sequentially
+  let createdCount = 0;
+  let updatedCount = 0;
+  const processedQuestions = [];
+
+  for (const q of questionsToInsert) {
+    const existing = await prisma.question.findFirst({
+      where: { text: q.text }
+    });
+
+    if (existing) {
+      const updated = await prisma.question.update({
+        where: { id: existing.id },
+        data: q
+      });
+      processedQuestions.push(updated);
+      updatedCount++;
+    } else {
+      const created = await prisma.question.create({
+        data: q
+      });
+      processedQuestions.push(created);
+      createdCount++;
+    }
+  }
 
   res.status(201).json(
     new ApiResponse(201, { 
-      count: createdQuestions.length,
-      questions: createdQuestions
-    }, `${createdQuestions.length} questions uploaded successfully.`)
+      count: processedQuestions.length,
+      createdCount,
+      updatedCount,
+      questions: processedQuestions
+    }, `Bulk upload complete. ${createdCount} new questions added, ${updatedCount} existing questions updated.`)
   );
 });
 
@@ -109,6 +137,15 @@ export const createQuestion = asyncHandler(async (req, res) => {
 
   if (!type || !text) {
     throw new ApiError(400, "Type and text are required fields");
+  }
+
+  // Prevent manual duplicate creation
+  const existing = await prisma.question.findFirst({
+    where: { text: text.trim() }
+  });
+
+  if (existing) {
+    throw new ApiError(400, "A question with the exact same text already exists in the question bank.");
   }
 
   const question = await prisma.question.create({

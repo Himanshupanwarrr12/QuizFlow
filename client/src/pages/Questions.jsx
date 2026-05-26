@@ -1,329 +1,284 @@
 import { useState, useEffect, useRef } from 'react';
 import { questionService } from '../services/api';
 
-const defaultQuestion = {
-  type: 'mcq',
-  category: 'Must Know',
-  subject: 'Combat Engineering',
-  topic: '',
-  difficulty: 'Medium',
-  bloom: 'Knowledge',
-  marks: 1,
-  text: '',
-  optionA: '',
-  optionB: '',
-  optionC: '',
-  optionD: '',
-  correctOptions: '',
-  explanation: ''
+const G = 'var(--gold)';
+const Dim = 'var(--tx-mute)';
+
+const DEFAULT_Q = {
+  type: 'mcq', category: 'Must Know', subject: 'Combat Engineering',
+  bloom: 'Knowledge', marks: 1,
+  text: '', optionA: '', optionB: '', optionC: '', optionD: '',
+  correctOptions: '', explanation: ''
 };
 
 export default function Questions() {
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [formQuestion, setFormQuestion] = useState(defaultQuestion);
-  const [submitting, setSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [questions,    setQuestions]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState('');
+  const [uploading,    setUploading]    = useState(false);
+  const [showModal,    setShowModal]    = useState(false);
+  const [formQ,        setFormQ]        = useState(DEFAULT_Q);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [searchQuery,  setSearchQuery]  = useState('');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [notification, setNotification] = useState(null); // { message: '', type: 'success' | 'error' }
+  const [editingId,    setEditingId]    = useState(null);
   const fileInputRef = useRef(null);
 
   const fetchQuestions = async () => {
     try {
       setLoading(true);
       const res = await questionService.getQuestions();
-      setQuestions(res.data.questions || []);
-      setError('');
-    } catch (err) {
-      setError('Failed to load questions.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      setQuestions(res.data.questions || []); setError('');
+    } catch { setError('Failed to load questions.'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    fetchQuestions();
-  }, []);
-
-  const handleImportClick = () => {
-    fileInputRef.current.click();
-  };
+  useEffect(() => { fetchQuestions(); }, []);
 
   const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
     try {
       setUploading(true);
-      await questionService.uploadQuestions(formData);
-      e.target.value = null; // reset input
-      fetchQuestions(); // refresh list
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to upload questions');
-      console.error(err);
-    } finally {
-      setUploading(false);
+      setNotification(null);
+      const startTime = Date.now();
+      const res = await questionService.uploadQuestions(fd);
+      
+      const elapsed = Date.now() - startTime;
+      const minDelay = 2000;
+      if (elapsed < minDelay) {
+        await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+      }
+
+      e.target.value = null; 
+      fetchQuestions();
+      const count = res.data?.count || 0;
+      setNotification({ message: `${count} questions uploaded successfully`, type: 'success' });
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) { 
+      setNotification({ message: err.response?.data?.message || 'Failed to upload', type: 'error' });
+      setTimeout(() => setNotification(null), 4000);
+    } finally { 
+      setUploading(false); 
     }
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm("Are you sure you want to permanently delete ALL questions? This cannot be undone.")) return;
-    try {
-      await questionService.deleteAllQuestions();
-      fetchQuestions();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to clear questions');
-    }
+    if (!window.confirm('Delete ALL questions? This cannot be undone.')) return;
+    try { await questionService.deleteAllQuestions(); fetchQuestions(); }
+    catch (err) { alert(err.response?.data?.message || 'Failed to clear'); }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this question?")) return;
-    try {
-      await questionService.deleteQuestion(id);
-      fetchQuestions();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete question');
-    }
+    if (!window.confirm('Delete this question?')) return;
+    try { await questionService.deleteQuestion(id); fetchQuestions(); }
+    catch (err) { alert(err.response?.data?.message || 'Failed to delete'); }
   };
 
-  const handleEdit = async (q) => {
-    const newText = window.prompt("Edit question text:", q.text);
-    if (newText === null || newText.trim() === "") return;
-
-    try {
-      await questionService.updateQuestion(q.id, { ...q, text: newText.trim() });
-      fetchQuestions();
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update question');
-    }
+  const handleEdit = (q) => {
+    setFormQ({
+      type: q.type || 'mcq',
+      category: q.category || 'Must Know',
+      subject: q.subject || 'Combat Engineering',
+      bloom: q.bloom || 'Knowledge',
+      marks: q.marks || 1,
+      text: q.text || '',
+      optionA: q.optionA || '',
+      optionB: q.optionB || '',
+      optionC: q.optionC || '',
+      optionD: q.optionD || '',
+      correctOptions: q.correctOptions || '',
+      explanation: q.explanation || ''
+    });
+    setEditingId(q.id);
+    setShowModal(true);
   };
 
   const handleTemplateDownload = () => {
-    const csvHeaders = ["type", "text", "option_A", "option_B", "option_C", "option_D", "correct_options(A,B,C...)", "category", "subject", "topic", "difficulty", "bloom", "marks", "explanation"];
-    const csvRows = [
-      ["mcq", "What is the primary role of a Combat Engineer?", "Bridging", "Breaching", "Mine Warfare", "All of the above", "D", "Must Know", "Combat Engineering", "Fundamentals", "Medium", "Knowledge", "2", "Combat engineers do bridging, breaching and mines."],
-      ["truefalse", "Earth is round.", "True", "False", "", "", "A", "Could Know", "Science", "Earth", "Easy", "Knowledge", "1", "Yes, Earth is an oblate spheroid."],
-      ["fillblank", "The speed of light is _____ km/s.", "", "", "", "", "299792", "Must Know", "Physics", "Light", "Hard", "Knowledge", "2", "Speed of light is 299792 km/s."]
+    const headers = ['type','text','option_A','option_B','option_C','option_D','correct_options(A,B,C...)','category','subject','marks'];
+    const rows = [
+      ['mcq','Which CSS property changes text color?','font-color','text-color','color','background-color','C','Must Know','CSS','1'],
+      ['mcq','Which company developed React?','Google','Meta','Microsoft','Amazon','B','Must Know','React','1'],
+      ['truefalse','JavaScript can be used for backend development.','TRUE','FALSE','','','A','Must Know','JavaScript','1'],
+      ['fillblank','The img tag is used to insert an image in HTML.','','','','','img','Must Know','HTML','1']
     ];
-
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [csvHeaders.join(","), ...csvRows.map(r => r.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "quizflow_question_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.map(c => `"${(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href = encodeURI(csv); a.download = 'quizflow_question_template.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   const toggleCorrectOption = (opt) => {
-    let current = formQuestion.correctOptions ? formQuestion.correctOptions.split(',') : [];
-    if (current.includes(opt)) {
-      current = current.filter(x => x !== opt);
-    } else {
-      current.push(opt);
-    }
-    setFormQuestion({ ...formQuestion, correctOptions: current.join(',') });
+    let curr = formQ.correctOptions ? formQ.correctOptions.split(',') : [];
+    curr = curr.includes(opt) ? curr.filter(x => x !== opt) : [...curr, opt];
+    setFormQ({ ...formQ, correctOptions: curr.join(',') });
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!formQuestion.text.trim()) {
-      alert("Question text is required");
-      return;
-    }
-    if (formQuestion.type === 'mcq' && (!formQuestion.optionA || !formQuestion.optionB)) {
-      alert("Option A and Option B are required for MCQ questions");
-      return;
-    }
-    if (!formQuestion.correctOptions) {
-      alert("Please mark at least one correct option or input the correct answer");
-      return;
-    }
-
+    if (!formQ.text.trim()) { alert('Question text is required'); return; }
+    if (formQ.type === 'mcq' && (!formQ.optionA || !formQ.optionB)) { alert('Options A and B required for MCQ'); return; }
+    if (!formQ.correctOptions) { alert('Please mark at least one correct answer'); return; }
     try {
       setSubmitting(true);
-      await questionService.createQuestion(formQuestion);
-      setShowModal(false);
-      setFormQuestion(defaultQuestion);
-      fetchQuestions();
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to create question");
-    } finally {
-      setSubmitting(false);
-    }
+      if (editingId) {
+        await questionService.updateQuestion(editingId, formQ);
+      } else {
+        await questionService.createQuestion(formQ);
+      }
+      setShowModal(false); setFormQ(DEFAULT_Q); setEditingId(null); fetchQuestions();
+    } catch (err) { alert(err.response?.data?.message || 'Failed to submit question'); }
+    finally { setSubmitting(false); }
   };
 
-  // Client-side question filtering
-  const filteredQuestions = questions.filter(q => {
-    const matchesSearch = !searchQuery.trim() || 
-      q.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      q.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (q.topic && q.topic.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesType = selectedType === 'all' || q.type === selectedType;
-
-    return matchesSearch && matchesType;
+  const filtered = questions.filter(q => {
+    const matchSearch = !searchQuery.trim() || q.text.toLowerCase().includes(searchQuery.toLowerCase()) || q.subject.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchType = selectedType === 'all' || q.type === selectedType;
+    const matchCategory = selectedCategory === 'all' || q.category === selectedCategory;
+    return matchSearch && matchType && matchCategory;
   });
 
+  const typeBadge = { mcq: { color: '#818cf8', bg: 'rgba(129,140,248,0.1)', label: 'MCQ' }, truefalse: { color: '#22c55e', bg: 'rgba(34,197,94,0.1)', label: 'T/F' }, fillblank: { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', label: 'Fill' } };
+  const diffBadge = { Easy: '#22c55e', Medium: '#f59e0b', Hard: '#f43f5e' };
+
   return (
-    <div>
-      <div className="flex justify-between items-end mb-6">
-        <div>
-          <div className="font-hd text-[34px] tracking-[3px] text-kh leading-none">QUESTION BANK</div>
-          <div className="font-mn text-[10px] text-txd mt-1 uppercase tracking-[1px]">
-            {filteredQuestions.length} OF {questions.length} QUESTIONS · MCQ · TRUE/FALSE · FILL IN BLANKS
+    <div className="space-y-5 animate-fade-in">
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv,.xlsx,.xls" className="hidden" />
+
+      {/* Full-Screen Circular Spinning Loader Overlay */}
+      {uploading && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center font-sans select-none animate-fade-in" 
+          style={{ background: 'rgba(8,23,12,0.92)', backdropFilter: 'blur(8px)' }}>
+          <div className="text-center p-10 border max-w-md w-full rounded-2xl relative overflow-hidden" 
+            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}>
+            <div className="w-16 h-16 border-4 border-dashed border-[#c9a227] rounded-full animate-spin mx-auto mb-6"></div>
+            <h2 className="text-[20px] font-black uppercase tracking-wider mb-2" style={{ color: 'var(--gold)' }}>Syncing Question Pool</h2>
+            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--tx-mute)' }}>
+              Processing question roster import file. Please wait, compiling secure database questions...
+            </p>
           </div>
         </div>
-        <div className="flex space-x-3">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-            className="hidden" 
-          />
-          <button 
-            onClick={handleTemplateDownload}
-            className="btn bg-sf border border-br text-txm hover:border-am transition-colors py-2.5 px-4 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center"
-          >
-            <span className="mr-2">⬇</span> Template
+      )}
+
+      {notification && (
+        <div className={`p-4 rounded-xl border transition-all duration-300 flex items-center justify-between shadow-lg ${
+          notification.type === 'success' 
+            ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-400' 
+            : 'bg-rose-950/40 border-rose-800/60 text-rose-400'
+        }`}>
+          <span className="text-[13px] font-black uppercase tracking-wider flex items-center gap-2">
+            {notification.type === 'success' ? '✓' : '⚠️'} {notification.message}
+          </span>
+          <button onClick={() => setNotification(null)} className="text-[14px] font-bold hover:text-white cursor-pointer select-none focus:outline-none">✕</button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex justify-between items-end">
+        <div>
+          <div className="page-title">Question Bank</div>
+          <div className="page-subtitle">{filtered.length} of {questions.length} questions · MCQ · True/False · Fill in Blanks</div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleTemplateDownload} className="btn btn-secondary uppercase tracking-widest text-[11px] px-4 py-2">⬇ Template</button>
+          <button onClick={handleClearAll} disabled={questions.length === 0} className="btn btn-danger uppercase tracking-widest text-[11px] px-4 py-2">✕ Clear All</button>
+          <button onClick={() => fileInputRef.current.click()} disabled={uploading} className="btn btn-secondary uppercase tracking-widest text-[11px] px-4 py-2">
+            ⬆ {uploading ? 'Uploading...' : 'Import CSV'}
           </button>
-          <button 
-            onClick={handleClearAll} 
-            disabled={questions.length === 0}
-            className="btn bg-[#e74c3c]/10 border border-[#e74c3c]/30 hover:bg-[#e74c3c]/20 text-[#e74c3c] transition-colors py-2.5 px-4 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="mr-2">✕</span> CLEAR ALL
-          </button>
-          <button 
-            onClick={handleImportClick} 
-            disabled={uploading}
-            className="btn bg-[#2980b9] hover:bg-[#3498db] text-white transition-colors py-2.5 px-4 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="mr-2">⬆</span> {uploading ? 'UPLOADING...' : 'IMPORT CSV'}
-          </button>
-          <button 
-            onClick={() => setShowModal(true)}
-            className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-4 rounded font-mn text-[11px] tracking-[1px] uppercase flex items-center"
-          >
-            <span className="mr-2">+</span> ADD NEW
-          </button>
+          <button onClick={() => { setEditingId(null); setFormQ(DEFAULT_Q); setShowModal(true); }} className="btn btn-primary uppercase tracking-widest text-[11px] px-4 py-2">+ Add New</button>
         </div>
       </div>
 
-      <div className="flex space-x-3 mb-6">
-        <input 
-          type="text" 
-          placeholder="Search questions..." 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="form-input bg-sf max-w-xs" 
-        />
-        <select 
-          value={selectedType}
-          onChange={(e) => setSelectedType(e.target.value)}
-          className="form-input bg-sf max-w-[200px] text-white"
-        >
+      {/* Filters */}
+      <div className="flex gap-3">
+        <input type="text" placeholder="Search questions..." value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)} className="form-input max-w-xs" />
+        <select value={selectedType} onChange={e => setSelectedType(e.target.value)} className="form-input max-w-[180px]">
           <option value="all">All Types</option>
           <option value="mcq">MCQ</option>
           <option value="truefalse">True/False</option>
           <option value="fillblank">Fill in Blanks</option>
         </select>
+        <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="form-input max-w-[180px]">
+          <option value="all">All Categories</option>
+          <option value="Must Know">Must Know</option>
+          <option value="Could Know">Could Know</option>
+          <option value="May Know">May Know</option>
+        </select>
       </div>
 
-      {error && <div className="alert-error mb-4">{error}</div>}
+      {error && <div className="alert-error">{error}</div>}
 
-      <div className="bg-sf border border-br rounded-md overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      {/* Table */}
+      <div className="card !p-0 overflow-x-auto">
+        <table className="data-table">
           <thead>
-            <tr className="bg-sf2 border-b border-br font-mn text-[10px] text-txd uppercase tracking-[1px]">
-              <th className="py-4 px-5 w-[50px]">#</th>
-              <th className="py-4 px-5">Question</th>
-              <th className="py-4 px-5 w-[100px]">Type</th>
-              <th className="py-4 px-5 w-[150px]">Category</th>
-              <th className="py-4 px-5 w-[120px]">Difficulty</th>
-              <th className="py-4 px-5 w-[80px]">Marks</th>
-              <th className="py-4 px-5 w-[150px] text-right">Actions</th>
+            <tr>
+              <th>#</th>
+              <th>Question</th>
+              <th>Type</th>
+              <th>Marks</th>
+              <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan="7" className="py-12 text-center text-txm font-mn text-[13px]">Loading questions...</td>
-              </tr>
-            ) : filteredQuestions.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="py-12 text-center text-txm font-mn text-[13px]">No matching questions found.</td>
-              </tr>
-            ) : (
-              filteredQuestions.map((q, index) => (
-                <tr key={q.id} className="border-b border-br last:border-0 hover:bg-sf2/30 transition-colors">
-                  <td className="py-4 px-5 font-mn text-[11px] text-txm">
-                    {(index + 1).toString().padStart(2, '0')}
+              <tr><td colSpan="6" className="py-12 text-center text-[13px]" style={{ color: Dim }}>Loading questions...</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan="6" className="py-12 text-center text-[13px]" style={{ color: Dim }}>No matching questions found.</td></tr>
+            ) : filtered.map((q, idx) => {
+              const tb = typeBadge[q.type] || typeBadge.mcq;
+              return (
+                <tr key={q.id}>
+                  <td className="font-mono text-[11px]" style={{ color: Dim }}>{(idx+1).toString().padStart(2,'0')}</td>
+                  <td>
+                    <div className="text-[13px] font-medium mb-1" style={{ color: 'var(--tx)' }}>{q.text}</div>
+                    <div className="text-[10px] uppercase tracking-wide" style={{ color: Dim }}>{q.subject}</div>
                   </td>
-                  <td className="py-4 px-5">
-                    <div className="text-kh text-[14px] mb-1">{q.text}</div>
-                    <div className="font-mn text-[10px] text-txd tracking-[1px]">{q.subject} · {q.topic}</div>
+                  <td>
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                        style={{ background: tb.bg, color: tb.color, border: `1px solid ${tb.color}30` }}>{tb.label}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider"
+                        style={{
+                          background: q.category === 'Must Know' ? 'rgba(244,63,94,0.1)' : q.category === 'Could Know' ? 'rgba(56,189,248,0.1)' : q.category === 'May Know' ? 'rgba(168,85,247,0.1)' : 'rgba(245,158,11,0.1)',
+                          color: q.category === 'Must Know' ? '#f43f5e' : q.category === 'Could Know' ? '#38bdf8' : q.category === 'May Know' ? '#a855f7' : '#f59e0b',
+                          border: `1px solid ${q.category === 'Must Know' ? '#f43f5e30' : q.category === 'Could Know' ? '#38bdf830' : q.category === 'May Know' ? '#a855f730' : '#f59e0b30'}`
+                        }}>
+                        {q.category}
+                      </span>
+                    </div>
                   </td>
-                  <td className="py-4 px-5">
-                    <span className="inline-block px-2 py-1 rounded bg-[#7c3aed]/15 text-[#a78bfa] border border-[#7c3aed]/30 font-mn text-[9px] uppercase tracking-[1px]">
-                      {q.type === 'truefalse' ? 'T/F' : q.type === 'fillblank' ? 'FILL' : 'MCQ'}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5">
-                    <span className="inline-block px-2 py-1 rounded bg-[#e74c3c]/15 text-[#fca5a5] border border-[#e74c3c]/30 font-mn text-[9px] uppercase tracking-[1px]">
-                      {q.category}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5">
-                    <span className="inline-block px-2 py-1 rounded bg-[#d4830a]/15 text-[#fcd34d] border border-[#d4830a]/30 font-mn text-[9px] uppercase tracking-[1px]">
-                      {q.difficulty}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5 font-mn text-[12px] text-kh">
-                    {q.marks}
-                  </td>
-                  <td className="py-4 px-5 text-right whitespace-nowrap">
-                    <button onClick={() => handleEdit(q)} className="btn bg-bg border border-br hover:border-kh transition-colors py-1.5 px-3 rounded font-mn text-[10px] text-txm mr-2 uppercase tracking-[1px]">Edit</button>
-                    <button onClick={() => handleDelete(q.id)} className="btn bg-[#e74c3c]/10 border border-[#e74c3c]/30 hover:bg-[#e74c3c]/20 transition-colors py-1.5 px-3 rounded font-mn text-[10px] text-[#e74c3c] uppercase tracking-[1px]">Del</button>
+                  <td className="font-mono font-bold" style={{ color: G }}>{q.marks}</td>
+                  <td className="text-right">
+                    <div className="inline-flex gap-2">
+                      <button onClick={() => handleEdit(q)} className="btn btn-secondary py-1.5 px-3 text-[11px] uppercase">Edit</button>
+                      <button onClick={() => handleDelete(q.id)} className="btn btn-danger py-1.5 px-3 text-[11px] uppercase">Del</button>
+                    </div>
                   </td>
                 </tr>
-              ))
-            )}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Manual Add Question Modal */}
+      {/* Add Question Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
-          <div className="bg-sf border border-br rounded-lg w-full max-w-4xl max-h-[95vh] overflow-y-auto shadow-2xl p-8 relative">
-            <button 
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-txd hover:text-kh text-xl font-mn transition-colors"
-            >
-              ✕
-            </button>
-            <div className="font-hd text-[26px] text-kh tracking-[2px] mb-6">ADD QUESTION</div>
-
-            <form onSubmit={handleFormSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in"
+          style={{ background: 'rgba(10,26,16,0.9)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-2xl border p-8 relative"
+            style={{ background: 'var(--bg-3)', borderColor: 'var(--border)' }}>
+            <div className="flex justify-between items-center mb-6">
+              <div className="text-[20px] font-black uppercase tracking-wide" style={{ color: G }}>{editingId ? 'Edit Question' : 'Add Question'}</div>
+              <button onClick={() => setShowModal(false)} className="text-[18px] cursor-pointer transition-colors"
+                style={{ color: Dim }} onMouseEnter={e => e.currentTarget.style.color='var(--tx)'} onMouseLeave={e => e.currentTarget.style.color=Dim}>✕</button>
+            </div>
+            <form onSubmit={handleFormSubmit} className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Question Type</label>
-                  <select 
-                    value={formQuestion.type}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, type: e.target.value, correctOptions: '' })}
-                    className="form-input bg-sf text-white"
-                  >
+                  <select value={formQ.type} onChange={e => setFormQ({ ...formQ, type: e.target.value, correctOptions: '' })} className="form-input">
                     <option value="mcq">MCQ (Single/Multi)</option>
                     <option value="truefalse">True / False</option>
                     <option value="fillblank">Fill in Blanks</option>
@@ -331,117 +286,44 @@ export default function Questions() {
                 </div>
                 <div>
                   <label className="form-label">Category</label>
-                  <select 
-                    value={formQuestion.category}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, category: e.target.value })}
-                    className="form-input bg-sf text-white"
-                  >
+                  <select value={formQ.category} onChange={e => setFormQ({ ...formQ, category: e.target.value })} className="form-input">
                     <option value="Must Know">Must Know</option>
                     <option value="Could Know">Could Know</option>
                     <option value="May Know">May Know</option>
                   </select>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Subject</label>
-                  <input 
-                    type="text" 
-                    value={formQuestion.subject}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, subject: e.target.value })}
-                    placeholder="e.g. Combat Engineering" 
-                    className="form-input bg-sf" 
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Topic</label>
-                  <input 
-                    type="text" 
-                    value={formQuestion.topic}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, topic: e.target.value })}
-                    placeholder="e.g. Fundamentals" 
-                    className="form-input bg-sf" 
-                  />
-                </div>
+              <div>
+                <label className="form-label">Subject</label>
+                <input type="text" value={formQ.subject} onChange={e => setFormQ({ ...formQ, subject: e.target.value })} placeholder="e.g. Combat Engineering" className="form-input" />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="form-label">Difficulty</label>
-                  <select 
-                    value={formQuestion.difficulty}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, difficulty: e.target.value })}
-                    className="form-input bg-sf text-white"
-                  >
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Bloom Level</label>
-                  <select 
-                    value={formQuestion.bloom}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, bloom: e.target.value })}
-                    className="form-input bg-sf text-white"
-                  >
-                    <option value="Knowledge">Knowledge</option>
-                    <option value="Comprehension">Comprehension</option>
-                    <option value="Application">Application</option>
-                    <option value="Analysis">Analysis</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="form-label">Marks</label>
-                  <input 
-                    type="number" 
-                    value={formQuestion.marks}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, marks: parseInt(e.target.value) || 1 })}
-                    className="form-input bg-sf" 
-                  />
+                  <input type="number" value={formQ.marks} onChange={e => setFormQ({ ...formQ, marks: parseInt(e.target.value)||1 })} className="form-input" />
                 </div>
               </div>
-
               <div>
-                <label className="form-label">Question Text</label>
-                <textarea 
-                  rows="3" 
-                  value={formQuestion.text}
-                  onChange={(e) => setFormQuestion({ ...formQuestion, text: e.target.value })}
-                  placeholder="Type question content here..." 
-                  className="form-input bg-sf resize-none" 
-                  required
-                />
+                <label className="form-label">Question Text *</label>
+                <textarea rows="3" value={formQ.text} onChange={e => setFormQ({ ...formQ, text: e.target.value })}
+                  placeholder="Type question content here..." className="form-input resize-none" required />
               </div>
 
-              {/* Conditional Options Render based on Type */}
-              {formQuestion.type === 'mcq' && (
-                <div className="space-y-4">
-                  <label className="form-label text-kh uppercase tracking-[1px] text-[11px]">Options (Click A/B/C/D to mark correct, multiple allowed)</label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {['A', 'B', 'C', 'D'].map((opt) => {
-                      const isCorrect = formQuestion.correctOptions.split(',').includes(opt);
+              {formQ.type === 'mcq' && (
+                <div>
+                  <label className="form-label mb-2">Options — click the letter to mark correct answer(s)</label>
+                  <div className="space-y-2.5">
+                    {['A','B','C','D'].map(opt => {
+                      const isCorrect = formQ.correctOptions.split(',').includes(opt);
                       return (
-                        <div key={opt} className="flex items-center space-x-2">
-                          <button 
-                            type="button"
-                            onClick={() => toggleCorrectOption(opt)}
-                            className={`w-10 h-10 flex items-center justify-center font-hd border rounded text-[14px] transition-all duration-200 ${
-                              isCorrect 
-                                ? 'bg-am text-oldd border-am shadow-lg shadow-am/20' 
-                                : 'bg-sf border-br text-txm hover:border-kh'
-                            }`}
-                          >
+                        <div key={opt} className="flex items-center gap-3">
+                          <button type="button" onClick={() => toggleCorrectOption(opt)}
+                            className="w-9 h-9 flex items-center justify-center font-black rounded-lg border text-[14px] transition-all flex-shrink-0 cursor-pointer"
+                            style={isCorrect ? { background: G, color: '#0a1a10', border: `1px solid ${G}` } : { background: 'rgba(0,0,0,0.3)', color: Dim, border: 'var(--border) 1px solid' }}>
                             {opt}
                           </button>
-                          <input 
-                            type="text" 
-                            value={formQuestion[`option${opt}`]}
-                            onChange={(e) => setFormQuestion({ ...formQuestion, [`option${opt}`]: e.target.value })}
-                            placeholder={`Option ${opt}`} 
-                            className="form-input bg-sf flex-1" 
-                          />
+                          <input type="text" value={formQ[`option${opt}`]} onChange={e => setFormQ({ ...formQ, [`option${opt}`]: e.target.value })}
+                            placeholder={`Option ${opt}`} className="form-input flex-1" />
                         </div>
                       );
                     })}
@@ -449,67 +331,39 @@ export default function Questions() {
                 </div>
               )}
 
-              {formQuestion.type === 'truefalse' && (
-                <div className="space-y-4">
-                  <label className="form-label text-kh uppercase tracking-[1px] text-[11px]">Select Correct Option</label>
-                  <div className="flex space-x-4">
-                    {['A', 'B'].map((opt) => (
-                      <button 
-                        key={opt}
-                        type="button"
-                        onClick={() => setFormQuestion({ ...formQuestion, optionA: 'True', optionB: 'False', correctOptions: opt })}
-                        className={`py-3 px-6 flex items-center justify-center font-mn border rounded text-[13px] tracking-[1px] uppercase transition-all duration-200 ${
-                          formQuestion.correctOptions === opt 
-                            ? 'bg-am text-oldd border-am shadow-lg shadow-am/20' 
-                            : 'bg-sf border-br text-txm hover:border-kh'
-                        }`}
-                      >
-                        {opt === 'A' ? 'True (A)' : 'False (B)'}
-                      </button>
-                    ))}
+              {formQ.type === 'truefalse' && (
+                <div>
+                  <label className="form-label mb-2">Select Correct Option</label>
+                  <div className="flex gap-3">
+                    {['A','B'].map(opt => {
+                      const isCorrect = formQ.correctOptions === opt;
+                      return (
+                        <button key={opt} type="button"
+                          onClick={() => setFormQ({ ...formQ, optionA: 'True', optionB: 'False', correctOptions: opt })}
+                          className="py-3 px-6 rounded-lg font-bold border text-[13px] uppercase tracking-widest transition-all cursor-pointer"
+                          style={isCorrect ? { background: G, color: '#0a1a10', border: `1px solid ${G}` } : { background: 'rgba(0,0,0,0.3)', color: Dim, border: '1px solid var(--border)' }}>
+                          {opt === 'A' ? 'True (A)' : 'False (B)'}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {formQuestion.type === 'fillblank' && (
+              {formQ.type === 'fillblank' && (
                 <div>
                   <label className="form-label">Correct Answer</label>
-                  <input 
-                    type="text" 
-                    value={formQuestion.correctOptions}
-                    onChange={(e) => setFormQuestion({ ...formQuestion, correctOptions: e.target.value })}
-                    placeholder="Enter correct answer word or value..." 
-                    className="form-input bg-sf" 
-                    required
-                  />
+                  <input type="text" value={formQ.correctOptions} onChange={e => setFormQ({ ...formQ, correctOptions: e.target.value })}
+                    placeholder="Enter correct answer word or value..." className="form-input" required />
                 </div>
               )}
 
-              <div>
-                <label className="form-label">Explanation (Optional)</label>
-                <textarea 
-                  rows="2" 
-                  value={formQuestion.explanation || ''}
-                  onChange={(e) => setFormQuestion({ ...formQuestion, explanation: e.target.value })}
-                  placeholder="Add explanation or correct rationale..." 
-                  className="form-input bg-sf resize-none" 
-                />
-              </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-br">
-                <button 
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="btn bg-sf border border-br text-txm hover:border-kh transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={submitting}
-                  className="btn bg-am hover:bg-am/90 text-oldd transition-colors py-2.5 px-6 rounded font-mn text-[12px] uppercase disabled:opacity-50"
-                >
-                  {submitting ? 'Adding...' : 'Add Question'}
+
+              <div className="flex gap-3 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+                <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">Cancel</button>
+                <button type="submit" disabled={submitting} className="btn btn-primary flex-1 justify-center py-2.5 uppercase tracking-widest text-[12px]">
+                  {submitting ? (editingId ? 'Updating...' : 'Adding...') : (editingId ? 'Save Changes' : 'Add Question')}
                 </button>
               </div>
             </form>
