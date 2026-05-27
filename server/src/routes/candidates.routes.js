@@ -3,6 +3,7 @@ import verifyJWT from "../middlewares/auth.middleware.js";
 import requireRole from "../middlewares/role.middleware.js";
 import validate from "../middlewares/validate.middleware.js";
 import { createUserSchema } from "../validators/user.validator.js";
+import { upload } from "../middlewares/upload.middleware.js";
 import {
   createCandidate,
   listCandidates,
@@ -10,6 +11,7 @@ import {
   updateCandidate,
   deactivateCandidate,
   activateCandidate,
+  uploadCandidates,
 } from "../controllers/examOfficer.controller.js";
 
 const router = Router();
@@ -19,6 +21,7 @@ router.use(verifyJWT, requireRole("super_admin", "exam_officer"));
 
 // Candidate Management Endpoints
 router.post("/", validate(createUserSchema), createCandidate);
+router.post("/upload", upload.single("file"), uploadCandidates);
 router.get("/", listCandidates);
 router.get("/:id", getCandidate);
 router.put("/:id", updateCandidate);

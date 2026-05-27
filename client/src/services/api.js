@@ -107,6 +107,14 @@ export const candidateService = {
     const response = await api.post('/candidates', data);
     return response.data;
   },
+  uploadCandidates: async (formData) => {
+    const response = await api.post('/candidates/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
   toggleCandidateStatus: async (id, isActive) => {
     const endpoint = `/candidates/${id}/${isActive ? 'activate' : 'deactivate'}`;
     const response = await api.patch(endpoint);

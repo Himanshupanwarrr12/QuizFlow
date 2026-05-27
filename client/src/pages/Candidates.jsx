@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { candidateService } from '../services/api';
 
 const UNITS = ['HQ BEG','21 Engr Regt','22 Engr Regt','A Coy','B Coy','C Coy','HQ Coy','Support Coy','Field Coy','Workshop','Signals Platoon'];
@@ -15,6 +15,9 @@ export default function Candidates() {
   const [formData,     setFormData]     = useState(DEFAULT_FORM);
   const [searchQuery,  setSearchQuery]  = useState('');
   const [submitting,   setSubmitting]   = useState(false);
+  const [uploading,    setUploading]    = useState(false);
+  const [notification, setNotification] = useState(null); // { message: '', type: 'success' | 'error' }
+  const fileInputRef = useRef(null);
 
   const fetchCandidates = async () => {
     try {
@@ -27,6 +30,46 @@ export default function Candidates() {
   };
 
   useEffect(() => { fetchCandidates(); }, [searchQuery]);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      setUploading(true);
+      setNotification(null);
+      const startTime = Date.now();
+      const res = await candidateService.uploadCandidates(fd);
+      
+      const elapsed = Date.now() - startTime;
+      const minDelay = 2000;
+      if (elapsed < minDelay) {
+        await new Promise(resolve => setTimeout(resolve, minDelay - elapsed));
+      }
+
+      e.target.value = null; 
+      fetchCandidates();
+      const count = res.data?.count || 0;
+      setNotification({ message: `${count} candidates processed successfully`, type: 'success' });
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) { 
+      setNotification({ message: err.response?.data?.message || 'Failed to upload', type: 'error' });
+      setTimeout(() => setNotification(null), 4000);
+    } finally { 
+      setUploading(false); 
+    }
+  };
+
+  const handleTemplateDownload = () => {
+    const headers = ['army_number','rank','name','unit','trade','password'];
+    const rows = [
+      ['CAND0001','Spr','Himanshu','21 Engr Regt','Engine Driver','Password@123'],
+      ['CAND0002','Spr','Amit Kumar','21 Engr Regt','Field Engineer','Password@123'],
+      ['1554902M','Hav','Rajesh Singh','HQ BEG','Radio Operator','SecretPass123']
+    ];
+    const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.map(c => `"${(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+    const a = document.createElement('a'); a.href = encodeURI(csv); a.download = 'quizflow_candidate_template.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
 
   const handleToggleStatus = async (id, current) => {
     try {
@@ -48,6 +91,35 @@ export default function Candidates() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv,.xlsx,.xls" className="hidden" />
+
+      {/* Full-Screen Circular Spinning Loader Overlay */}
+      {uploading && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center font-sans select-none animate-fade-in" 
+          style={{ background: 'rgba(8,23,12,0.92)', backdropFilter: 'blur(8px)' }}>
+          <div className="text-center p-10 border max-w-md w-full rounded-2xl relative overflow-hidden" 
+            style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}>
+            <div className="w-16 h-16 border-4 border-dashed border-[#c9a227] rounded-full animate-spin mx-auto mb-6"></div>
+            <h2 className="text-[20px] font-black uppercase tracking-wider mb-2" style={{ color: 'var(--gold)' }}>Syncing Candidate Roster</h2>
+            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--tx-mute)' }}>
+              Processing candidate roster import file. Please wait, compiling secure database roster...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {notification && (
+        <div className={`p-4 rounded-xl border transition-all duration-300 flex items-center justify-between shadow-lg ${
+          notification.type === 'success' 
+            ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-400' 
+            : 'bg-rose-950/40 border-rose-800/60 text-rose-400'
+        }`}>
+          <span className="text-[13px] font-black uppercase tracking-wider flex items-center gap-2">
+            {notification.type === 'success' ? '✓' : '⚠️'} {notification.message}
+          </span>
+          <button onClick={() => setNotification(null)} className="text-[14px] font-bold hover:text-white cursor-pointer select-none focus:outline-none">✕</button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex justify-between items-end">
@@ -55,9 +127,15 @@ export default function Candidates() {
           <div className="page-title">Candidates Roster</div>
           <div className="page-subtitle">Registration · Enrollment · Unit Rosters</div>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary px-5 py-2.5 uppercase tracking-widest text-[12px]">
-          + Add Candidate
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleTemplateDownload} className="btn btn-secondary uppercase tracking-widest text-[11px] px-4 py-2">⬇ Template</button>
+          <button onClick={() => fileInputRef.current.click()} disabled={uploading} className="btn btn-secondary uppercase tracking-widest text-[11px] px-4 py-2">
+            ⬆ {uploading ? 'Uploading...' : 'Import Roster'}
+          </button>
+          <button onClick={() => setShowModal(true)} className="btn btn-primary px-5 py-2.5 uppercase tracking-widest text-[12px]">
+            + Add Candidate
+          </button>
+        </div>
       </div>
 
       {/* Stats bar */}
