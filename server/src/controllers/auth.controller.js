@@ -6,10 +6,12 @@ import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import env from "../config/env.js";
 
+const isProduction = env.NODE_ENV === "production" || env.COOKIE_SECURE;
+
 const cookieOptions = {
   httpOnly: true,
-  secure: env.COOKIE_SECURE,
-  sameSite: "strict",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   maxAge: 24 * 60 * 60 * 1000,
 };
 
