@@ -14,9 +14,14 @@ for (const key of requiredVars) {
   }
 }
 
+const cleanCorsOrigin = (origin) => {
+  if (!origin) return "";
+  return origin.trim().replace(/^['"]|['"]$/g, "").replace(/\/$/, "");
+};
+
 const env = Object.freeze({
   PORT: Number(process.env.PORT) || 8000,
-  CORS_ORIGIN: process.env.CORS_ORIGIN,
+  CORS_ORIGIN: cleanCorsOrigin(process.env.CORS_ORIGIN),
   ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET,
   ACCESS_TOKEN_EXPIRY: process.env.ACCESS_TOKEN_EXPIRY,
   COOKIE_SECURE: process.env.COOKIE_SECURE === "true",
