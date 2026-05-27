@@ -316,6 +316,24 @@ export default function ExamPortal() {
 
   if (!activeSession) return null;
 
+  if (!activeSession.questions || activeSession.questions.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center font-sans select-none p-6" style={{ background: 'var(--bg)' }}>
+        <div className="text-center p-10 border max-w-md w-full rounded-2xl relative overflow-hidden" 
+          style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}>
+          <div className="w-12 h-12 border-2 border-transparent border-t-[#c9a227] rounded-full animate-spin mx-auto mb-6"></div>
+          <h2 className="text-[20px] font-black uppercase tracking-wider mb-2" style={{ color: 'var(--gold)' }}>No Questions Available</h2>
+          <p className="text-[13px] leading-relaxed mb-6" style={{ color: 'var(--tx-mute)' }}>
+            This examination does not contain any questions. Please contact the administrator to assign questions to this exam.
+          </p>
+          <button onClick={closeWindow} className="btn btn-primary w-full justify-center py-2.5 uppercase tracking-widest text-[12px]">
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── RULES PAGE ───────────────────────────────────────────────────────────────
   if (showRules) {
     const rules = [
