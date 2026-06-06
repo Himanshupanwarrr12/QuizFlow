@@ -2,8 +2,6 @@
 
 A comprehensive, highly-secure examination platform tailored for military and institutional training environments. Built with a specialized "Forest Green & Gold" military design system, it provides robust role-based access for Admins, Exam Officers, and Candidates.
 
-Developed by **SLOG Solutions Pvt Ltd and 2STC**.
-
 ## 🚀 Features
 
 - **Role-Based Architecture**:
