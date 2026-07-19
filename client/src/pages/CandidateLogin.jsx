@@ -234,16 +234,6 @@ export default function Login({ defaultRole = 'candidate' }) {
 
         </div>
 
-        {/* Footer Branding directly below the card */}
-        <div className="flex flex-col items-center gap-1.5 w-full text-center">
-          <div className="bg-[#f1c40f]/90 text-[#0a1a10] px-6 py-1.5 rounded-full text-[11px] sm:text-[12px] font-black tracking-wide shadow-lg border border-[#f1c40f]">
-            Developed by SLOG Solutions Pvt Ltd and 2STC
-          </div>
-          <div className="bg-[#f1c40f]/90 text-[#0a1a10] px-5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wider shadow-lg border border-[#f1c40f]">
-            All Rights Reserved @ SLOG Solutions Pvt Ltd
-          </div>
-        </div>
-
       </div>
 
     </div>

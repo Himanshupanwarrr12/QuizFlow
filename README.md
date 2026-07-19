@@ -213,6 +213,3 @@ Use these credentials to log in and test different user interfaces:
 | [http://localhost:5173/officer-login](http://localhost:5173/officer-login) | **Exam Officer** | `EO0000001` | `ChangeMe@123` | Setup exams, upload question papers, and grade students |
 | [http://localhost:5173/candidate-login](http://localhost:5173/candidate-login) | **Candidate 1** | `CAND0001` | `Password@123` | Attend designated exam sessions |
 | [http://localhost:5173/candidate-login](http://localhost:5173/candidate-login) | **Candidate 2** | `CAND0002` | `Password@123` | Attend designated exam sessions |
-
----
-*All Rights Reserved @ SLOG Solutions Pvt Ltd*
